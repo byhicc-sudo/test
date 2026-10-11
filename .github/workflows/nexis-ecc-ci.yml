@@ -1,4 +1,4 @@
-name: NEXIS ECC 64-bit bounded research
+name: NEXIS ECC 64-bit checkpointed CI experiment
 
 on:
   push:
@@ -6,21 +6,96 @@ on:
       - 'ecc-lab/**'
       - '.github/workflows/nexis-ecc-ci.yml'
   workflow_dispatch:
+    inputs:
+      start_new:
+        description: 'Discard checkpoint and explicitly start a new 64-bit synthetic test'
+        required: false
+        type: boolean
+        default: false
+
+# Do not race two checkpoint consumers on the same branch.
+concurrency:
+  group: nexis-ecc-64-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  run-64-bit:
+  bounded-64-bit-test:
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
-      - uses: actions/checkout@v4
-      - name: Compile V24 native ECC engine
-        run: |
-          g++ -std=c++17 -O3 -Wno-deprecated-declarations ecc-lab/NEXIS_ECC_V24_RESUMABLE.cpp -lcrypto -o "$RUNNER_TEMP/nexis_v24"
+      - name: Fetch exact source
+        uses: actions/checkout@v4
 
-      - name: Run bounded 64-bit kangaroo (NO 24-bit job)
+      - name: Compile native secp256k1 V24 engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -O3 -std=c++17 -Wno-deprecated-declarations \
+            ecc-lab/NEXIS_ECC_V24_RESUMABLE.cpp -lcrypto -o "$RUNNER_TEMP/nexis_v24"
+
+      - name: Recover saved 64-bit checkpoint from preceding completed run
+        id: restore
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          START_NEW: ${{ inputs.start_new || false }}
+          EXPECTED_PUB: '02558650b3abe53dc236f53cc096a3f43ccbbe0c4a23480957608ebb6d1024198b'
+        run: |
+          set -euo pipefail
+          echo "restored=false" >> "$GITHUB_OUTPUT"
+          echo "source_run=none" >> "$GITHUB_OUTPUT"
+
+          checkpoint="$RUNNER_TEMP/nexis_64.chk"
+          if [[ "$START_NEW" == "true" ]]; then
+            echo "::notice::Explicit fresh start requested; previous checkpoints ignored."
+            exit 0
+          fi
+
+          # Only completed runs of this exact workflow and branch are considered.
+          api="repos/$GITHUB_REPOSITORY/actions/workflows/nexis-ecc-ci.yml/runs?branch=$GITHUB_REF_NAME&status=completed&per_page=50"
+          if ! run_ids="$(gh api "$api" --jq '.workflow_runs[].id')"; then
+            echo "::error::Unable to list prior workflow runs; refusing to silently reset."
+            exit 1
+          fi
+
+          restored=false
+          while IFS= read -r prior_run; do
+            [[ -n "$prior_run" ]] || continue
+            [[ "$prior_run" != "$GITHUB_RUN_ID" ]] || continue
+            candidate_dir="$RUNNER_TEMP/candidate-$prior_run"
+            mkdir -p "$candidate_dir"
+            if gh run download "$prior_run" -R "$GITHUB_REPOSITORY" \
+                -n nexis-ecc-64-bit-run -D "$candidate_dir" >/dev/null 2>&1; then
+              candidate="$candidate_dir/nexis_64.chk"
+              if [[ -s "$candidate" ]] \
+                && [[ "$(head -n 1 "$candidate")" == 'NEXIS_KANGAROO_V24' ]] \
+                && [[ "$(awk 'NR == 2 {print $1}' "$candidate")" == '64' ]] \
+                && [[ "$(awk 'NR == 4 {print $1}' "$candidate")" == "$EXPECTED_PUB" ]]; then
+                cp "$candidate" "$checkpoint"
+                echo "::notice::Recovered verified-header checkpoint from run $prior_run."
+                echo "restored=true" >> "$GITHUB_OUTPUT"
+                echo "source_run=$prior_run" >> "$GITHUB_OUTPUT"
+                restored=true
+                break
+              fi
+            fi
+            rm -rf "$candidate_dir"
+          done <<< "$run_ids"
+
+          if [[ "$restored" != "true" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+              echo "::error::No prior compatible checkpoint. To start fresh set start_new=true."
+              exit 1
+            fi
+            echo "::warning::No compatible checkpoint found. Starting a fresh, explicitly logged CI push run."
+          fi
+
+      - name: Run ONLY the 64-bit bounded synthetic experiment
+        id: test64
         shell: bash
         run: |
           set -euo pipefail
@@ -31,19 +106,29 @@ jobs:
             --seconds 240 \
             --max-steps 25000000 \
             --checkpoint "$RUNNER_TEMP/nexis_64.chk" | tee "$RUNNER_TEMP/nexis_64.log"
-          grep -q '^bits=64$' "$RUNNER_TEMP/nexis_64.log"
-          grep -Eq '^status=(PAUSED|SOLVED)$' "$RUNNER_TEMP/nexis_64.log"
-          if grep -q '^status=SOLVED$' "$RUNNER_TEMP/nexis_64.log"; then
-            grep -q '^verification=PUBLIC_KEY_MATCH$' "$RUNNER_TEMP/nexis_64.log"
-          fi
 
-      - name: Preserve 64-bit log and resumable checkpoint
+          grep -qx 'bits=64' "$RUNNER_TEMP/nexis_64.log"
+          grep -Eq '^status=(SOLVED|PAUSED)$' "$RUNNER_TEMP/nexis_64.log"
+          if [[ "${{ steps.restore.outputs.restored }}" == 'true' ]]; then
+            grep -qx 'resumed=1' "$RUNNER_TEMP/nexis_64.log"
+          else
+            grep -qx 'resumed=0' "$RUNNER_TEMP/nexis_64.log"
+          fi
+          if grep -qx 'status=SOLVED' "$RUNNER_TEMP/nexis_64.log"; then
+            grep -qx 'verification=PUBLIC_KEY_MATCH' "$RUNNER_TEMP/nexis_64.log"
+            echo "::notice::Verified 64-bit scalar found."
+          else
+            echo "::notice::No scalar found in this bounded test. Checkpoint saved."
+          fi
+          grep -E '^(resumed|status|phase|new_steps|total_steps|tame_steps|wild_steps|found_scalar|verification)=' "$RUNNER_TEMP/nexis_64.log"
+
+      - name: Save checkpoint and run evidence for next run
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nexis-ecc-64-bit-run
           path: |
-            ${{ runner.temp }}/nexis_64.log
             ${{ runner.temp }}/nexis_64.chk
-          retention-days: 7
+            ${{ runner.temp }}/nexis_64.log
+          retention-days: 30
           if-no-files-found: warn
