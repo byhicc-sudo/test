@@ -1,0 +1,51 @@
+name: NEXIS ECC bounded CI verification
+
+on:
+  push:
+    paths:
+      - 'ecc-lab/**'
+      - '.github/workflows/nexis-ecc-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-crypto-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile V24 ECC program
+        shell: bash
+        run: |
+          g++ -std=c++17 -O3 -Wall -Wextra -Wno-misleading-indentation ecc-lab/NEXIS_ECC_V24_RESUMABLE.cpp -lcrypto -o ecc-lab/solver
+
+      - name: Verify synthetic 24-bit scalar using public key only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ecc-lab/solver --bits 24 --pub 036eca606eead9395ffcd6a68d7a0840d8fdac35382bb534bb1bd84d73a6313b91 --seconds 30 --max-steps 200000 --checkpoint "$RUNNER_TEMP/lab24.chk" --seed 1 | tee "$RUNNER_TEMP/ecc24.log"
+          grep -q '^status=SOLVED$' "$RUNNER_TEMP/ecc24.log"
+          grep -q '^found_scalar=0xFE9E9D$' "$RUNNER_TEMP/ecc24.log"
+          grep -q '^verification=PUBLIC_KEY_MATCH$' "$RUNNER_TEMP/ecc24.log"
+
+      - name: Verify 64-bit target and checkpoint resume in bounded smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          ecc-lab/solver --bits 64 --pub 02558650b3abe53dc236f53cc096a3f43ccbbe0c4a23480957608ebb6d1024198b --seconds 2 --max-steps 20000 --checkpoint "$RUNNER_TEMP/lab64.chk" --seed 1 | tee "$RUNNER_TEMP/ecc64-first.log"
+          ecc-lab/solver --bits 64 --pub 02558650b3abe53dc236f53cc096a3f43ccbbe0c4a23480957608ebb6d1024198b --seconds 2 --max-steps 20000 --checkpoint "$RUNNER_TEMP/lab64.chk" --seed 1 | tee "$RUNNER_TEMP/ecc64-resumed.log"
+          grep -q '^resumed=1$' "$RUNNER_TEMP/ecc64-resumed.log"
+          grep -Eq '^status=(PAUSED|SOLVED)$' "$RUNNER_TEMP/ecc64-resumed.log"
+
+      - name: Store CI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexis-ecc-test-logs
+          path: |
+            ${{ runner.temp }}/ecc24.log
+            ${{ runner.temp }}/ecc64-first.log
+            ${{ runner.temp }}/ecc64-resumed.log
+          retention-days: 7
