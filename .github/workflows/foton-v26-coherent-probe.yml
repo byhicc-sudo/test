@@ -1,0 +1,63 @@
+name: FOTON V26 Coherent EX Probe
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - '.github/workflows/foton-v26-coherent-probe.yml'
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q numpy scipy quimb cotengra
+      - name: Decode V26
+        run: |
+          base64 -d foton-v26/FOTON_40LZ_PREMEASURE_V26.zip.b64 > /tmp/v26.zip
+          echo "c567c734c917be9b1974d3528d51479ee3a5543c7c7fb4029431fb016ed22aa6  /tmp/v26.zip" | sha256sum -c -
+          mkdir -p /tmp/v26
+          unzip -q /tmp/v26.zip -d /tmp/v26
+      - name: Probe through first coherent EX interactions
+        run: |
+          cd /tmp/v26/FOTON_40LZ_PREMEASURE_V26
+          python - <<'PY'
+          import time, numpy as np
+          import quimb.tensor as qtn
+          import foton_40lz_layout_v26 as L
+          import foton_40lz_mps_v26 as M
+          LIMIT=5000; MB=64; CO=1e-14
+          CHECK={100,255,267,500,1000,2000,3000,4000,5000}
+          c,EX12,NON,A,B,PHW,ws,cb,mr,ph=L.build(optimize=True, measured_prefix52=0x549087dac0213)
+          _,pos=L.load_pos(c.next)
+          free=[int(pos[q]) for q in (EX12+NON)]
+          psi=qtn.MPS_computational_state('0'*c.next)
+          for q in free: M.g1(psi,M.H,q,MB,CO)
+          t0=time.time(); n=0; first_touch=None; done=False
+          orig_ex=set(EX12)
+          for gs,rev in L.full_segments(cb,mr,ph):
+              it=reversed(gs) if rev else iter(gs)
+              for g in it:
+                  if first_touch is None and any(q in orig_ex for q in g[1:]):
+                      first_touch=n
+                      print('FIRST_EX_TOUCH',n,g,flush=True)
+                  M.gate(psi,L.remap_gate(g,pos),MB,CO)
+                  n += 1
+                  if n in CHECK:
+                      norm=float(np.real(psi.norm()))
+                      print(f'CHECK gate={n} max_bond={max(psi.bond_sizes() or [1])} norm={norm:.16g} elapsed={time.time()-t0:.3f}',flush=True)
+                  if n>=LIMIT:
+                      done=True; break
+              if done: break
+          norm=float(np.real(psi.norm()))
+          print('PROBE_GATES',n,flush=True)
+          print('PROBE_MAX_BOND',max(psi.bond_sizes() or [1]),flush=True)
+          print('PROBE_NORM',format(norm,'.16g'),flush=True)
+          print('PROBE_SECONDS',time.time()-t0,flush=True)
+          assert first_touch==255
+          assert abs(norm-1)<1e-8
+          print('V26_COHERENT_EX_PROBE=PASS',flush=True)
+          PY
