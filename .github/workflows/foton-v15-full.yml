@@ -24,7 +24,7 @@ jobs:
           python -m pip install numpy scipy quimb cotengra
       - name: Decode and verify V15.1
         run: |
-          base64 -d foton-v15/full/FOTON_40LZ_LOCALITY_V15_1.zip.b64 > /tmp/v15.zip
+          cat foton-v15/full/v15.part00 foton-v15/full/v15.part01 | base64 -d > /tmp/v15.zip
           echo "e5a0ab99f09d0b8189c72aedf00e21648bf23c6f4ec5b26357ad10788038cbac  /tmp/v15.zip" | sha256sum -c -
           rm -rf /tmp/v15
           mkdir -p /tmp/v15
