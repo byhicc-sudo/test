@@ -143,7 +143,7 @@ def build_sched_tn(old,a,b,c,expected=None,wrong_bit=None):
     return qtn.TensorNetwork(ts)
 
 def scalar_contract(tn,opt='auto-hq'):
-    x=tn.contract(all, optimize=opt)
+    x=tn.contract(all, optimize=opt, output_inds=())
     return float(np.asarray(x.data))
 
 def audit(round_tests=2,sched_tests=2,opt='auto-hq'):
