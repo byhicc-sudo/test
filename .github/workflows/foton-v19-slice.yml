@@ -11,7 +11,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,3 +23,7 @@ jobs:
         run: |
           export PYTHONPATH="$PWD/foton-v18:$PYTHONPATH"
           python foton-v19/slice_api_probe_v19.py
+      - name: Reduce exact T1 strip memory with internal slicing
+        run: |
+          export PYTHONPATH="$PWD/foton-v18:$PYTHONPATH"
+          python foton-v19/slice_reduce_v19.py
