@@ -17,3 +17,4 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -q numpy scipy quimb cotengra
       - run: cd foton-v19 && PYTHONPATH=../foton-v18 python slice_api_probe_v19.py
+      - run: cd foton-v19 && PYTHONPATH=../foton-v18 python slice_plan_v19.py
