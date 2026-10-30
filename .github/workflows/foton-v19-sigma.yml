@@ -1,0 +1,23 @@
+name: FOTON V19 Sigma Coherent
+
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v19/sigma_coherent_mps_v19.py'
+      - '.github/workflows/foton-v19-sigma.yml'
+  workflow_dispatch:
+
+jobs:
+  sigma:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -q numpy scipy quimb cotengra
+      - name: Run coherent Sigma0 Sigma1 layout test
+        run: python foton-v19/sigma_coherent_mps_v19.py
