@@ -35,3 +35,5 @@ jobs:
       - name: Run 1615-site photonic MPS smoke
         run: |
           python foton-v15/smoke_v15.py
+
+# v2: CCX decomposed into one- and two-site gates for quimb MPS
