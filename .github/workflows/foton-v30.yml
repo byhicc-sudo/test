@@ -1,4 +1,4 @@
-name: FOTON V30 Global Phase Kickback
+name: FOTON V30 Local 40-Coordinate Audit
 
 on:
   push:
@@ -17,4 +17,4 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python foton-v30/phase_kickback_v30.py
+      - run: python foton-v30/nonce32_ex2_8_rank_v30.py
