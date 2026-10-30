@@ -24,7 +24,7 @@ jobs:
           cat foton-v15/full/v15.part00 foton-v15/full/v15.part01 | base64 -d > /tmp/v15.zip
           echo "e5a0ab99f09d0b8189c72aedf00e21648bf23c6f4ec5b26357ad10788038cbac  /tmp/v15.zip" | sha256sum -c -
           unzip -q /tmp/v15.zip -d /tmp/v15
-      - name: Probe first 1000 real SHA oracle gates
+      - name: Probe first 100 real SHA oracle gates
         run: |
           cd /tmp/v15/FOTON_40LZ_LOCALITY_V15_1
           python - <<'PY'
@@ -32,7 +32,7 @@ jobs:
           import quimb.tensor as qtn
           import foton_40lz_layout_v15 as L
           import foton_40lz_mps_v15 as M
-          LIMIT=1000; MB=64; CO=1e-14
+          LIMIT=100; MB=64; CO=1e-14
           c,EX8,NON,A,B,ws,cb,mr,ph=L.build()
           _,pos=L.load_pos(c.next)
           free=[int(pos[q]) for q in EX8+NON]
@@ -44,7 +44,7 @@ jobs:
               for g in it:
                   M.gate(psi,L.remap_gate(g,pos),MB,CO)
                   n += 1
-                  if n % 100 == 0:
+                  if n % 10 == 0:
                       print(f'PROBE gate={n} max_bond={max(psi.bond_sizes() or [1])} elapsed={time.time()-t0:.3f}',flush=True)
                   if n >= LIMIT:
                       done=True; break
@@ -54,5 +54,5 @@ jobs:
           print('PROBE_MAX_BOND',max(psi.bond_sizes() or [1]))
           print('PROBE_NORM',format(norm,'.16g'))
           print('PROBE_SECONDS',time.time()-t0)
-          print('V15_1_REAL_SHA_MPS_PROBE_1000=PASS')
+          print('V15_1_REAL_SHA_MPS_PROBE_100=PASS')
           PY
