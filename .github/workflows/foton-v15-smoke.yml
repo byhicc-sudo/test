@@ -1,0 +1,37 @@
+name: FOTON V15 Remote Smoke
+
+on:
+  push:
+    branches:
+      - foton-v15-runner
+    paths:
+      - 'foton-v15/**'
+      - '.github/workflows/foton-v15-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install photonic tensor stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy quimb cotengra
+      - name: Environment
+        run: |
+          python --version
+          python - <<'PY'
+          import numpy, scipy, quimb, cotengra
+          print("numpy", numpy.__version__)
+          print("scipy", scipy.__version__)
+          print("quimb", quimb.__version__)
+          print("cotengra", cotengra.__version__)
+          PY
+      - name: Run 1615-site photonic MPS smoke
+        run: |
+          python foton-v15/smoke_v15.py
