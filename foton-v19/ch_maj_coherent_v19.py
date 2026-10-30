@@ -26,7 +26,6 @@ def run(kind):
         base=4*i
         for q in (base,base+1,base+2):
             g1(psi,H,q)
-    initial=psi.copy()
     peak=1; t0=time.time()
     for i in range(32):
         a,b,c,s=4*i,4*i+1,4*i+2,4*i+3
@@ -54,9 +53,15 @@ def run(kind):
             ccx(psi,a,c,s)
             ccx(psi,a,b,s)
     inv=time.time()-t1
-    ov=abs(complex(initial.H @ psi))
-    print(kind,'inverse_sec',inv,'restore_overlap',ov,'restore_norm',float(np.real(psi.norm())),flush=True)
-    assert abs(norm-1)<1e-9 and abs(ov-1)<1e-8
+    for i in range(32):
+        base=4*i
+        for q in (base,base+1,base+2):
+            g1(psi,H,q)
+    restore_norm=float(np.real(psi.norm()))
+    amp0=complex(psi.amplitude('0'*N))
+    restore_prob=abs(amp0)**2
+    print(kind,'inverse_sec',inv,'restore_prob_zero',restore_prob,'restore_norm',restore_norm,flush=True)
+    assert abs(norm-1)<1e-9 and abs(restore_norm-1)<1e-9 and abs(restore_prob-1)<1e-8
     print(kind.upper()+'_COHERENT_MPS=PASS',flush=True)
 
 print('=== V19 CH MAJ COHERENT MPS ===',flush=True)
