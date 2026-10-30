@@ -1,0 +1,19 @@
+name: FOTON V24 SHA Round Components
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v24/**'
+      - '.github/workflows/foton-v24.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q numpy scipy quimb cotengra
+      - run: python foton-v24/sha_round_component_chain_v24.py
