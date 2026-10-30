@@ -1,0 +1,92 @@
+name: FOTON V15.1 Full Remote Audit
+
+on:
+  push:
+    branches:
+      - foton-v15-runner
+    paths:
+      - 'foton-v15/full/**'
+      - '.github/workflows/foton-v15-full.yml'
+  workflow_dispatch:
+
+jobs:
+  full-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install tensor stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy scipy quimb cotengra
+      - name: Decode and verify V15.1
+        run: |
+          base64 -d foton-v15/full/FOTON_40LZ_LOCALITY_V15_1.zip.b64 > /tmp/v15.zip
+          echo "e5a0ab99f09d0b8189c72aedf00e21648bf23c6f4ec5b26357ad10788038cbac  /tmp/v15.zip" | sha256sum -c -
+          rm -rf /tmp/v15
+          mkdir -p /tmp/v15
+          unzip -q /tmp/v15.zip -d /tmp/v15
+          find /tmp/v15 -maxdepth 2 -type f -printf '%p %s bytes\n'
+      - name: Syntax audit
+        run: |
+          cd /tmp/v15/FOTON_40LZ_LOCALITY_V15_1
+          python -m py_compile *.py
+      - name: Full reversible SHA basis audit
+        run: |
+          cd /tmp/v15/FOTON_40LZ_LOCALITY_V15_1
+          python foton_40lz_core_v15.py
+      - name: Layout audit
+        run: |
+          cd /tmp/v15/FOTON_40LZ_LOCALITY_V15_1
+          python foton_40lz_layout_v15.py
+      - name: 1615-site MPS init and sample
+        run: |
+          cd /tmp/v15/FOTON_40LZ_LOCALITY_V15_1
+          python foton_40lz_mps_v15.py --iterations 0 --max-bond 64 --cutoff 1e-14 --seed 40
+      - name: Real SHA oracle MPS 20000-gate probe
+        run: |
+          cd /tmp/v15/FOTON_40LZ_LOCALITY_V15_1
+          python - <<'PY'
+          import numpy as np
+          import quimb.tensor as qtn
+          import foton_40lz_layout_v15 as L
+          import foton_40lz_mps_v15 as M
+
+          LIMIT=20000
+          MB=64
+          CO=1e-14
+
+          c,EX8,NON,A,B,ws,cb,mr,ph=L.build()
+          _,pos=L.load_pos(c.next)
+          free=[int(pos[q]) for q in (EX8+NON)]
+
+          psi=qtn.MPS_computational_state('0'*c.next)
+          for q in free:
+              M.g1(psi,M.H,q,MB,CO)
+
+          n=0
+          maxb=1
+          done=False
+          for gs,rev in L.full_segments(cb,mr,ph):
+              it=reversed(gs) if rev else iter(gs)
+              for g in it:
+                  M.gate(psi,L.remap_gate(g,pos),MB,CO)
+                  n += 1
+                  if n % 1000 == 0:
+                      maxb=max(maxb,max(psi.bond_sizes() or [1]))
+                      print(f'PROBE gate={n} max_bond={maxb}',flush=True)
+                  if n >= LIMIT:
+                      done=True
+                      break
+              if done:
+                  break
+
+          norm=float(np.real(psi.norm()))
+          print('PROBE_GATES',n,flush=True)
+          print('PROBE_MAX_BOND',max(psi.bond_sizes() or [1]),flush=True)
+          print('PROBE_NORM',norm,flush=True)
+          print('V15_1_REAL_SHA_MPS_PROBE=PASS',flush=True)
+          PY
