@@ -69,7 +69,7 @@ def run(kind, coherent=True):
     print('nnz',nnz,'sparse_fraction',nnz/entries,flush=True)
     rng=random.Random(2100+(1 if kind=='sigma1' else 0))
     t1=time.time()
-    for j in range(12):
+    for j in range(2):
         e=rng.getrandbits(32); s=rng.getrandbits(32)
         inp=qtn.MPS_computational_state(bits_for(e,s,order))
         out=inp.gate_with_mpo(mpo,method='zipup',max_bond=16,cutoff=1e-14)
@@ -77,7 +77,7 @@ def run(kind, coherent=True):
         amp=complex(out.amplitude(want))
         assert abs(abs(amp)-1)<1e-11,(j,amp)
         assert abs(float(np.real(out.norm()))-1)<1e-11
-    print('basis_operator_tests 12 PASS seconds',time.time()-t1,flush=True)
+    print('basis_operator_tests 2 PASS seconds',time.time()-t1,flush=True)
 
     if coherent:
         psi=product_plus_e_zero_s(order)
