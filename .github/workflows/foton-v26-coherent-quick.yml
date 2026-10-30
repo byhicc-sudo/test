@@ -1,0 +1,42 @@
+name: FOTON V26 Coherent EX Quick Probe
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - '.github/workflows/foton-v26-coherent-quick.yml'
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q numpy scipy quimb cotengra
+      - run: |
+          base64 -d foton-v26/FOTON_40LZ_PREMEASURE_V26.zip.b64 > /tmp/v26.zip
+          mkdir -p /tmp/v26 && unzip -q /tmp/v26.zip -d /tmp/v26
+      - name: Probe first 600 gates
+        run: |
+          cd /tmp/v26/FOTON_40LZ_PREMEASURE_V26
+          python - <<'PY'
+          import time, numpy as np, quimb.tensor as qtn
+          import foton_40lz_layout_v26 as L, foton_40lz_mps_v26 as M
+          LIMIT=600; MB=64; CO=1e-14
+          CHECK={250,255,256,267,300,350,400,450,500,550,600}
+          c,EX12,NON,A,B,PHW,ws,cb,mr,ph=L.build(optimize=True, measured_prefix52=0x549087dac0213)
+          _,pos=L.load_pos(c.next); free=[int(pos[q]) for q in EX12+NON]
+          psi=qtn.MPS_computational_state('0'*c.next)
+          for q in free: M.g1(psi,M.H,q,MB,CO)
+          t0=time.time(); n=0; done=False
+          for gs,rev in L.full_segments(cb,mr,ph):
+            for g in (reversed(gs) if rev else iter(gs)):
+              M.gate(psi,L.remap_gate(g,pos),MB,CO); n+=1
+              if n in CHECK:
+                print(f'CHECK gate={n} bond={max(psi.bond_sizes() or [1])} norm={float(np.real(psi.norm())):.16g} elapsed={time.time()-t0:.3f}',flush=True)
+              if n>=LIMIT: done=True; break
+            if done: break
+          print('V26_QUICK_COHERENT_PROBE=PASS',flush=True)
+          PY
