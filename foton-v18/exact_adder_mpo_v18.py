@@ -59,14 +59,14 @@ def basis_mps(x, y, n=32):
     for i in range(n):
         p=(((x>>i)&1)<<1)|((y>>i)&1)
         vecs.append(eye[:,p])
-    return qtn.MatrixProductState.from_product(vecs)
+    return qtn.MPS_product_state(vecs)
 
 def plus_x_y0_mps(n=32):
     # each site: (|x=0,y=0> + |x=1,y=0>)/sqrt(2)
     v=np.zeros(4,dtype=DT)
     v[0]=1/math.sqrt(2)
     v[2]=1/math.sqrt(2)
-    return qtn.MatrixProductState.from_product([v.copy() for _ in range(n)])
+    return qtn.MPS_product_state([v.copy() for _ in range(n)])
 
 def overlap(a,b):
     return complex(a.H @ b)
