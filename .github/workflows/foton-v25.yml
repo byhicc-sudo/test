@@ -1,0 +1,18 @@
+name: FOTON V25 Premeasurement Audit
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v25/**'
+      - '.github/workflows/foton-v25.yml'
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python foton-v25/premeasurement_96_to_44_v25.py
