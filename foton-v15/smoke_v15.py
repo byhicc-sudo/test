@@ -5,7 +5,7 @@ import quimb
 import quimb.tensor as qtn
 import cotengra, scipy
 
-N=1615
+N=79
 FREE=list(range(40))
 ANC=list(range(40,79))
 
