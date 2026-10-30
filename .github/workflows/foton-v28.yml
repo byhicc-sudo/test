@@ -1,0 +1,20 @@
+name: FOTON V28 96-Rail Triangular Latent
+
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v28/**'
+      - '.github/workflows/foton-v28.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python foton-v28/triangular_96rail_v28.py
