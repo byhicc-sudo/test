@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import math, hashlib, struct, time
+import math, hashlib, struct, time, os
 import numpy as np
 import quimb.tensor as qtn
 from scipy.sparse import csr_matrix
@@ -145,10 +145,15 @@ for i,g in enumerate(init_g,1):
     apply_gate(g)
 print('INIT_PASS','bond',max(psi.bond_sizes() or [1]),'norm',float(np.real(psi.norm())),'sec',time.time()-t0,flush=True)
 
-for t,gs in enumerate(rounds):
+MAX_ROUNDS=int(os.getenv('MAX_ROUNDS','8'))
+MAX_GATES=int(os.getenv('MAX_GATES','0'))
+for t,gs in enumerate(rounds[:MAX_ROUNDS]):
     rt=time.time()
     for j,g in enumerate(gs,1):
         apply_gate(g)
+        if MAX_GATES and j>=MAX_GATES:
+            print(f'PARTIAL_GATE_LIMIT round={t} gate={j} bond={max(psi.bond_sizes() or [1])} norm={float(np.real(psi.norm()))}',flush=True)
+            break
         if j%500==0:
             print(f'ROUND {t} gate {j}/{len(gs)} bond {max(psi.bond_sizes() or [1])}',flush=True)
     bond=max(psi.bond_sizes() or [1])
@@ -156,6 +161,8 @@ for t,gs in enumerate(rounds):
     print(f'ROUND_DONE {t} bond {bond} norm {norm:.16g} sec {time.time()-rt:.3f}',flush=True)
     if bond>=MB:
         print('BOND_CAP_REACHED',t,MB,flush=True)
+        break
+    if MAX_GATES:
         break
 print('TOTAL_SEC',time.time()-t0,flush=True)
 print('V23_PROBE_DONE',flush=True)
