@@ -29,3 +29,5 @@ for attr in ('nslices','sliced_inds','multiplicity','total_flops','max_size'):
             print('ATTR',attr,v,flush=True)
         except Exception as e:
             print('ATTR_ERR',attr,repr(e),flush=True)
+
+# trigger-v19
