@@ -53,6 +53,51 @@ def full_adder_mpo(n=32):
         arrays.append(A)
     return qtn.MatrixProductOperator(arrays, shape='lrud')
 
+def full_subtractor_mpo(n=32):
+    arrays=[]
+    for i in range(n):
+        first=(i==0); last=(i==n-1)
+        if first and last:
+            A=np.zeros((4,4),dtype=DT)
+            bi=0
+            for p in range(4):
+                x=(p>>1)&1; y=p&1
+                d=x^y^bi
+                q=(x<<1)|d
+                A[q,p]=1
+        elif first:
+            A=np.zeros((2,4,4),dtype=DT)
+            bi=0
+            for bo in range(2):
+                for p in range(4):
+                    x=(p>>1)&1; y=p&1
+                    d=x^y^bi
+                    b2=((1-y)&(x|bi)) | (x&bi)
+                    if bo==b2:
+                        q=(x<<1)|d
+                        A[bo,q,p]=1
+        elif last:
+            A=np.zeros((2,4,4),dtype=DT)
+            for bi in range(2):
+                for p in range(4):
+                    x=(p>>1)&1; y=p&1
+                    d=x^y^bi
+                    q=(x<<1)|d
+                    A[bi,q,p]=1
+        else:
+            A=np.zeros((2,2,4,4),dtype=DT)
+            for bi in range(2):
+                for bo in range(2):
+                    for p in range(4):
+                        x=(p>>1)&1; y=p&1
+                        d=x^y^bi
+                        b2=((1-y)&(x|bi)) | (x&bi)
+                        if bo==b2:
+                            q=(x<<1)|d
+                            A[bi,bo,q,p]=1
+        arrays.append(A)
+    return qtn.MatrixProductOperator(arrays,shape='lrud')
+
 def basis_mps(x, y, n=32):
     eye=np.eye(4,dtype=DT)
     vecs=[]
@@ -75,6 +120,7 @@ def main():
     print("=== FOTON V18 EXACT ADDER MPO ===", flush=True)
     print("quimb", quimb.__version__, flush=True)
     mpo=full_adder_mpo(N)
+    sub=full_subtractor_mpo(N)
     print("sites", N, flush=True)
     print("mpo_tensors", mpo.num_tensors, flush=True)
     print("mpo_max_bond", mpo.max_bond(), flush=True)
@@ -109,7 +155,7 @@ def main():
     print("coherent_max_bond_after",out.max_bond(),flush=True)
 
     t2=time.time()
-    back=out.gate_with_mpo(mpo.H, method='zipup', max_bond=64, cutoff=1e-14)
+    back=out.gate_with_mpo(sub, method='zipup', max_bond=64, cutoff=1e-14)
     n2=float(back.norm())
     ov=overlap(psi,back)
     print("coherent_inverse_seconds",time.time()-t2,flush=True)
@@ -124,6 +170,7 @@ def main():
 
     dense_entries=sum(int(np.prod(t.shape)) for t in mpo.tensors)
     nnz=sum(int(np.count_nonzero(t.data)) for t in mpo.tensors)
+    print('sub_mpo_max_bond',sub.max_bond(),flush=True)
     print("mpo_dense_entries",dense_entries,flush=True)
     print("mpo_nonzero_entries",nnz,flush=True)
     print("nonzero_fraction",nnz/dense_entries,flush=True)
