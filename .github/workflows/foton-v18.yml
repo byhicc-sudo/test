@@ -23,5 +23,5 @@ jobs:
         run: python foton-v18/exact_adder_mpo_v18.py
       - name: Exact bounded multi-source MPOs
         run: python foton-v18/multisource_mpo_v18.py
-      - name: Exact SHA round and schedule tensor kernel
-        run: python foton-v18/foton_v18_tn_kernel.py --round-tests 1 --sched-tests 1 --opt greedy
+      - name: Exact basis-sliced SHA round and schedule tensor audit
+        run: python foton-v18/foton_v18_sliced_audit.py --tests 16 --opt greedy
