@@ -1,0 +1,18 @@
+name: FOTON V32 Second SHA Latent
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v32/**'
+      - '.github/workflows/foton-v32.yml'
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python foton-v32/second_sha_latent_v32.py
