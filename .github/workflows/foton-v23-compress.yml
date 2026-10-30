@@ -1,0 +1,19 @@
+name: FOTON V23 Global Compress
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v23/sigma_compress_v23_lite.py'
+      - '.github/workflows/foton-v23-compress.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q numpy scipy quimb cotengra
+      - run: python foton-v23/sigma_compress_v23_lite.py
