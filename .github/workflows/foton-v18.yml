@@ -5,6 +5,7 @@ on:
     branches: [foton-v15-runner]
     paths:
       - 'foton-v18/**'
+      - 'foton-v19/**'
       - '.github/workflows/foton-v18.yml'
   workflow_dispatch:
 
@@ -25,3 +26,7 @@ jobs:
         run: python foton-v18/multisource_mpo_v18.py
       - name: Exact basis-sliced SHA round and schedule tensor audit
         run: python foton-v18/foton_v18_sliced_audit.py --tests 16 --opt greedy
+      - name: V19 cotengra slicing API and memory probe
+        run: |
+          export PYTHONPATH="$PWD/foton-v18:$PYTHONPATH"
+          python foton-v19/slice_api_probe_v19.py
