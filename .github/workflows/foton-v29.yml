@@ -1,4 +1,4 @@
-name: FOTON V29 Latent Rank Audit
+name: FOTON V29 Endpoint Jacobian
 
 on:
   push:
@@ -17,4 +17,4 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python foton-v29/latent_rank_v29.py
+      - run: python foton-v29/endpoint_jacobian_v29.py
