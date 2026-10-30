@@ -1,0 +1,25 @@
+name: FOTON V21 Packed Sigma
+
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v21/sigma_packed_apply_v21.py'
+      - '.github/workflows/foton-v21-packed.yml'
+  workflow_dispatch:
+
+jobs:
+  packed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -q numpy scipy quimb cotengra
+      - name: Run packed sparse reversible Sigma apply
+        run: |
+          export PYTHONPATH="$PWD/foton-v20:$PYTHONPATH"
+          python foton-v21/sigma_packed_apply_v21.py
