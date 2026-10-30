@@ -1,0 +1,20 @@
+name: FOTON V31 Endpoint Oracle
+
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v31/**'
+      - '.github/workflows/foton-v31.yml'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python foton-v31/endpoint_oracle_v31.py
