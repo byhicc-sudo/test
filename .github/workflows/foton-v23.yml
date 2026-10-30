@@ -22,5 +22,5 @@ jobs:
       - name: Run bounded 96-rail round0 bond probe
         env:
           MAX_ROUNDS: '1'
-          MAX_GATES: '1500'
+          MAX_GATES: '300'
         run: python foton-v23/job96_bond_probe_v23_fast.py
