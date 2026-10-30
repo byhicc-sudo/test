@@ -36,58 +36,92 @@ def from_lrp(B,k,n):
     if k==n-1: return B[:,0,:]
     return B
 
+def right_canonical_arrays(inp,cutoff=1e-14):
+    n=inp.L
+    arr=[as_lrp(inp.arrays[k],k,n).astype(DT,copy=True) for k in range(n)]
+    for k in range(n-1,0,-1):
+        A=arr[k]
+        l,r,p=A.shape
+        M=A.reshape(l,r*p)
+        U,s,Vh=np.linalg.svd(M,full_matrices=False)
+        if s.size:
+            keep=max(1,int(np.count_nonzero(s>cutoff*s[0])))
+        else:
+            keep=1
+        U=U[:,:keep]; s=s[:keep]; Vh=Vh[:keep,:]
+        arr[k]=Vh.reshape(keep,r,p)
+        G=U*s[None,:]
+        arr[k-1]=np.einsum('alp,lr->arp',arr[k-1],G,optimize=True)
+    return arr
+
+def right_suffix_counts(order,layers,trans):
+    n=len(order)
+    q=[None]*(n+1)
+    q[n]={0:1.0}
+    for k in range(n-1,-1,-1):
+        mult=1.0 if order[k]<32 else 2.0
+        d={}
+        for a,b,x in trans[k]:
+            d[a]=d.get(a,0.0)+mult*q[k+1][b]
+        q[k]=d
+    return q
+
 def sparse_zipup_sigma(inp,kind,max_bond=128,cutoff=CUTOFF):
     order,cols,layers,trans=build_trellis(kind)
     maps=[{s:i for i,s in enumerate(layer)} for layer in layers]
+    q=right_suffix_counts(order,layers,trans)
+    root_scale=math.sqrt(q[0][0])
     n=64
+    in_arrays=right_canonical_arrays(inp)
     out_arrays=[]
-    # carry C[p, a_left, w_left]
+    # Apply a right-canonical normalized MPO U/root_scale.
     C=np.ones((1,1,1),dtype=DT)
     peak_T=0; peak_C=1; peak_rank=1
     t0=time.time()
 
     for k,(v,edges) in enumerate(zip(order,trans)):
-        A=as_lrp(inp.arrays[k],k,n).astype(DT,copy=False)
+        A=in_arrays[k]
         aL,aR,_=A.shape
         L=len(layers[k]); R=len(layers[k+1])
         assert C.shape[1:]==(aL,L),(k,C.shape,A.shape,L)
         D=C.shape[0]
 
         T=np.zeros((D,2,aR,R),dtype=DT)
-        # group edges by left trellis state and label
         for sa,sb,x in edges:
             lw=maps[k][sa]; rw=maps[k+1][sb]
-            Cw=C[:,:,lw]  # D x aL
+            # exact diagonal gauge that makes the trellis right-isometric
+            fac=math.sqrt(q[k+1][sb]/q[k][sa])
+            Cw=C[:,:,lw]
             if v<32:
-                # E output = E input = trellis label x
-                M=Cw @ A[:,:,x]
+                M=(Cw @ A[:,:,x])*fac
                 T[:,x,:,rw] += M
             else:
                 for si in (0,1):
-                    M=Cw @ A[:,:,si]
+                    M=(Cw @ A[:,:,si])*fac
                     T[:,si^x,:,rw] += M
 
         peak_T=max(peak_T,T.size)
         if k==n-1:
             assert aR==1 and R==1
-            B=T[:,:,0,0]  # D x phys (last boundary tensor)
+            B=T[:,:,0,0]
             out_arrays.append(B)
             break
 
         M=T.reshape(D*2,aR*R)
         U,s,Vh=np.linalg.svd(M,full_matrices=False)
         if s.size:
-            tol=max(cutoff*s[0],cutoff)
-            keep=int(np.count_nonzero(s>tol))
+            keep=int(np.count_nonzero(s>cutoff*s[0]))
         else:
             keep=0
         keep=max(1,min(keep,max_bond))
         U=U[:,:keep]; s=s[:keep]; Vh=Vh[:keep,:]
-        B=U.reshape(D,2,keep).transpose(0,2,1) # D x keep x phys
+        B=U.reshape(D,2,keep).transpose(0,2,1)
         out_arrays.append(from_lrp(B,k,n))
         C=(s[:,None]*Vh).reshape(keep,aR,R)
         peak_C=max(peak_C,C.size); peak_rank=max(peak_rank,keep)
 
+    # Undo the harmless global normalization introduced by the canonical gauge.
+    out_arrays[0]=out_arrays[0]*root_scale
     out=qtn.MatrixProductState(out_arrays,shape='lrp')
     return out,order,time.time()-t0,peak_T,peak_C,peak_rank
 
