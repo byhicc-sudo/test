@@ -1,0 +1,21 @@
+name: FOTON V25 Sigma Order Audit
+
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - 'foton-v25/sigma_order_v25.py'
+      - '.github/workflows/foton-v25-sigma.yml'
+  workflow_dispatch:
+
+jobs:
+  sigma-order:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q numpy scipy quimb cotengra
+      - run: python foton-v25/sigma_order_v25.py
