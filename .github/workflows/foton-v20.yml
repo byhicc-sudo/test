@@ -19,3 +19,7 @@ jobs:
           python-version: '3.12'
       - name: Run exact sparse Sigma trellis audit
         run: python foton-v20/sigma_sparse_trellis_v20.py
+      - name: Build exact Sigma MPS directly from trellis
+        run: |
+          export PYTHONPATH="$PWD/foton-v20:$PYTHONPATH"
+          python foton-v20/sigma_direct_mps_v20.py
