@@ -113,3 +113,5 @@ def run(kind):
 run('sigma1')
 run('sigma0')
 print('V21_PACKED_SPARSE_OPERATOR=PASS',flush=True)
+
+# trigger-packed-v21
