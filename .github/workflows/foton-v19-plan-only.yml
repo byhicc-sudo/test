@@ -18,3 +18,5 @@ jobs:
       - run: |
           export PYTHONPATH="$PWD/foton-v18:$PYTHONPATH"
           python foton-v19/slice_reduce_v19.py
+
+# trigger-plan-v19
