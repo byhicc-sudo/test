@@ -19,8 +19,8 @@ CX=np.array([[1,0,0,0],
              [0,0,0,1],
              [0,0,1,0]],dtype=complex).reshape(2,2,2,2)
 
-MAX_BOND=8
-CUTOFF=1e-8
+MAX_BOND=64
+CUTOFF=0.0
 
 def g1(psi,G,q):
     psi.gate_(G,q,contract='swap+split',max_bond=MAX_BOND,cutoff=CUTOFF)
@@ -73,5 +73,5 @@ for q in FREE:
 norm=float(psi.norm())
 print("final max_bond",max(psi.bond_sizes() or [1]), flush=True)
 print("norm",norm, flush=True)
-assert abs(norm-1.0) < 1e-6
+assert abs(norm-1.0) < 1e-9
 print("PYTHON_REMOTE_SMOKE=PASS", flush=True)
