@@ -1,0 +1,20 @@
+name: FOTON V19 Slice Plan Only
+on:
+  push:
+    branches: [foton-v15-runner]
+    paths:
+      - '.github/workflows/foton-v19-plan-only.yml'
+  workflow_dispatch:
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q numpy scipy quimb cotengra
+      - run: |
+          export PYTHONPATH="$PWD/foton-v18:$PYTHONPATH"
+          python foton-v19/slice_reduce_v19.py
