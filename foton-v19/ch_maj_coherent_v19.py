@@ -67,3 +67,5 @@ def run(kind):
 print('=== V19 CH MAJ COHERENT MPS ===',flush=True)
 run('ch'); run('maj')
 print('V19_CH_MAJ=PASS',flush=True)
+
+# trigger-chmaj-v19
