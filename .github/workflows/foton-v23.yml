@@ -11,7 +11,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,5 +19,5 @@ jobs:
           python-version: '3.12'
       - name: Install
         run: python -m pip install -q numpy scipy quimb cotengra
-      - name: Run 96-rail real-job bond probe
-        run: python foton-v23/job96_bond_probe_v23.py
+      - name: Run fast 96-rail round0-7 bond probe
+        run: python foton-v23/job96_bond_probe_v23_fast.py
