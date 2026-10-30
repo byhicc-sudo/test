@@ -70,8 +70,8 @@ def sparse_zipup_sigma(inp,kind,max_bond=128,cutoff=CUTOFF):
         peak_T=max(peak_T,T.size)
         if k==n-1:
             assert aR==1 and R==1
-            B=T[:,:,0,0]  # D x phys
-            out_arrays.append(from_lrp(B,k,n))
+            B=T[:,:,0,0]  # D x phys (last boundary tensor)
+            out_arrays.append(B)
             break
 
         M=T.reshape(D*2,aR*R)
