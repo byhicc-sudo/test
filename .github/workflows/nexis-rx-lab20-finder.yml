@@ -1,0 +1,56 @@
+name: NEXIS-RX LAB20 blind solo nonce finder official RandomX
+on:
+  push:
+    branches: [nexis-rx-lab20-real-winner-finder]
+    paths:
+      - "nexis_rx_hist100/lab20_solo_finder.cpp"
+      - ".github/workflows/nexis-rx-lab20-finder.yml"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  find-nonce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download authenticated 100 real block inputs and audit evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_100_EXACT_RANDOMX_POW
+          repository: byhicc-sudo/test
+          run-id: 41355345515
+          github-token: ${{ github.token }}
+          path: input
+      - name: Build pinned official RandomX C++ with production hash calculation
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libboost-dev libssl-dev >/dev/null
+          PIN=102f8acf90a7649ada410de5499a7ec62e49e1da
+          git clone -q https://github.com/tevador/RandomX.git upstream
+          git -C upstream checkout -q "$PIN"
+          test "$(git -C upstream rev-parse HEAD)" = "$PIN"
+          cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
+          cmake --build build --target randomx -j 2
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Iupstream/src nexis_rx_hist100/lab20_solo_finder.cpp build/librandomx.a -lcrypto -pthread -o finder
+          echo NATIVE_CPP_BUILD=OK
+      - name: Find new exact-valid nonces in a real historic Monero job without using its winning nonce
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
+          ./finder input/computed100.csv "$SEED" 768 output/actual_candidates.csv | tee output/SUMMARY.txt
+          test "$(wc -l < output/actual_candidates.csv)" = 769
+          grep -F 'HISTORICAL_BLOB_VERIFY=PASS' output/SUMMARY.txt
+          grep -F 'RANDOMX_FULL_HASHES=768' output/SUMMARY.txt
+          sha256sum output/actual_candidates.csv > output/SHA256.txt
+          cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload real tested hashes, newly found valid shares and test outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXIS_RX_LAB20_REAL_NONCE_FINDER
+          path: output/
+          if-no-files-found: ignore
