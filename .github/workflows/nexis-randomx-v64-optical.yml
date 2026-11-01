@@ -58,6 +58,29 @@ jobs:
           print("V64_REAL_DATASET_SAMPLES: 160/160 PASS")
           PY
           sha256sum V64_BASELINE_HASH.txt V64_OBSERVED_HASH.txt V64_OPTICAL_TRACE.txt
+      - name: Replace actual dataset XOR with ideal MZI port computation
+        run: |
+          set -euo pipefail
+          python3 nexis-randomx-v64/switch_to_mzi_compute.py upstream-randomx/src/vm_interpreted_light.cpp
+          cmake --build upstream-randomx/build --parallel 2
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o optical_compute_rx
+          ./optical_compute_rx > V64_OPTICAL_COMPUTE_HASH.txt 2> V64_OPTICAL_COMPUTE_TRACE.txt
+          diff -u V64_BASELINE_HASH.txt V64_OPTICAL_COMPUTE_HASH.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('V64_OPTICAL_COMPUTE_TRACE.txt').read_text().splitlines()
+          summaries=[x for x in lines if x.startswith('V64_OPTICAL_MZI_SUMMARY|')]
+          assert len(summaries)==1
+          d={k:int(v) for k,v in (t.split('=',1) for t in summaries[0].split('|')[1:])}
+          assert d=={'runs':32,'words':524288,'bits':33554432,'errors':0,'samples':160},d
+          for l in lines:
+              if l.startswith('RXOPT|'):
+                  d2=dict(x.split('=',1) for x in l.split('|')[1:])
+                  assert d2['mzi0']==d2['real0'],d2
+          print('V64_COMPUTE_REPLACEMENT_HASH: 4/4 PASS')
+          print('V64_COMPUTE_REPLACEMENT_BITS: 33554432/33554432 PASS')
+          PY
+          sha256sum V64_OPTICAL_COMPUTE_HASH.txt V64_OPTICAL_COMPUTE_TRACE.txt
       - name: Upload verified public trace
         if: always()
         uses: actions/upload-artifact@v4
@@ -67,4 +90,6 @@ jobs:
             V64_BASELINE_HASH.txt
             V64_OBSERVED_HASH.txt
             V64_OPTICAL_TRACE.txt
+            V64_OPTICAL_COMPUTE_HASH.txt
+            V64_OPTICAL_COMPUTE_TRACE.txt
           if-no-files-found: ignore
