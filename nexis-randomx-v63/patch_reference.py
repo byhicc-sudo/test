@@ -23,7 +23,7 @@ static void nexis_rx_probe(const char* stage, unsigned iteration,
         std::fprintf(stderr, "|%s=", labels[k]);
         for (unsigned i=0;i<4;++i) {
             auto v = k==0 ? state.f[i] : (k==1 ? state.e[i] : state.a[i]);
-            rx_store_vec_i128(reinterpret_cast<rx_vec_i128*>(words), rx_cast_vec_f2i(v));
+            rx_store_vec_f128(reinterpret_cast<double*>(words), v);
             for (unsigned b=0;b<16;++b) std::fprintf(stderr, "%02x", (unsigned)words[b]);
         }
     }
