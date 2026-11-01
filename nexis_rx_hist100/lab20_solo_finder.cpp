@@ -39,7 +39,8 @@ static cpp_int parsehex(std::string s){
  if(s.substr(0,2)=="0x")s.erase(0,2);
  cpp_int x=0;for(char c:s){
   unsigned z=(c>='0'&&c<='9')?c-'0':((c>='a'&&c<='f')?c-'a'+10:99);
-  if(z>15)throw std::runtime_error("difficulty hex");x=(x<<4)+z;
+  if(z>15)throw std::runtime_error("difficulty hex");
+  x=(x<<4)+z;
  }return x;
 }
 static uint64_t fnv(const Bytes&data,uint64_t start=14695981039346656037ULL){
