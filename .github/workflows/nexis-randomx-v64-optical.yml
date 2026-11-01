@@ -1,0 +1,70 @@
+name: NEXIS RandomX V64 real-dataset ideal optical XOR
+on:
+  push:
+    branches:
+      - nexis-randomx-v64-optical-dataset
+permissions:
+  contents: read
+jobs:
+  optical-xor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout public harness
+        uses: actions/checkout@v4
+      - name: Get pinned official RandomX v1.2.3
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.2.3 https://github.com/tevador/RandomX.git upstream-randomx
+          test "$(git -C upstream-randomx rev-parse HEAD)" = "12f2c2ffe2108d6cf54c391fee33c8bc3646cdab"
+      - name: Build unmodified RandomX and verify four hashes
+        run: |
+          set -euo pipefail
+          cmake -S upstream-randomx -B upstream-randomx/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build upstream-randomx/build --parallel 2
+          cc -O2 -I upstream-randomx/src -c nexis-randomx-v62/verify.c -o verify.o
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o baseline_rx
+          ./baseline_rx > V64_BASELINE_HASH.txt
+          grep -Fx 'OFFICIAL_RANDOMX_V1: 4/4 PASS' V64_BASELINE_HASH.txt
+      - name: Patch read-only photonic MZI observer and compare
+        run: |
+          set -euo pipefail
+          python3 nexis-randomx-v64/patch_optical_dataset.py upstream-randomx/src/vm_interpreted.cpp
+          cmake --build upstream-randomx/build --parallel 2
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o observed_rx
+          ./observed_rx > V64_OBSERVED_HASH.txt 2> V64_OPTICAL_TRACE.txt
+          diff -u V64_BASELINE_HASH.txt V64_OBSERVED_HASH.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          rows=Path("V64_OPTICAL_TRACE.txt").read_text().splitlines()
+          checks=[r for r in rows if r.startswith("RXOPT|")]
+          totals=[r for r in rows if r.startswith("V64_OPTICAL_MZI_SUMMARY|")]
+          assert len(totals)==1, (len(totals),rows[-5:])
+          total=dict(x.split("=",1) for x in totals[0].split("|")[1:])
+          expected={"runs":32,"words":524288,"bits":33554432,"errors":0,"samples":160}
+          assert {k:int(v) for k,v in total.items()}==expected, (total,expected)
+          assert len(checks)==160, len(checks)
+          seen=set()
+          for row in checks:
+              d=dict(x.split("=",1) for x in row.split("|")[1:])
+              run=int(d["run"]); it=int(d["iter"])
+              assert 1<=run<=32 and it in (0,1,2,1023,2047)
+              assert (run,it) not in seen
+              seen.add((run,it))
+              assert d["mzi0"]==d["real0"], d
+          assert len(seen)==160
+          print("V64_REFERENCE_HASH_UNCHANGED: 4/4 PASS")
+          print("V64_IDEAL_MZI_XOR: 33554432/33554432 PASS")
+          print("V64_REAL_DATASET_SAMPLES: 160/160 PASS")
+          PY
+          sha256sum V64_BASELINE_HASH.txt V64_OBSERVED_HASH.txt V64_OPTICAL_TRACE.txt
+      - name: Upload verified public trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexis-randomx-v64-optical-dataset
+          path: |
+            V64_BASELINE_HASH.txt
+            V64_OBSERVED_HASH.txt
+            V64_OPTICAL_TRACE.txt
+          if-no-files-found: ignore
