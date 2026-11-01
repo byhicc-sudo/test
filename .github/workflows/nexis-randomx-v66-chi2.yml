@@ -1,0 +1,78 @@
+name: NEXIS RandomX V66 coherent chi2 phase chain
+on:
+  push:
+    branches:
+      - nexis-randomx-v66-coherent-chi2
+permissions:
+  contents: read
+jobs:
+  coherent-optic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout public test harness
+        uses: actions/checkout@v4
+      - name: Pin official RandomX v1.2.3
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.2.3 https://github.com/tevador/RandomX.git upstream-randomx
+          test "$(git -C upstream-randomx rev-parse HEAD)" = "12f2c2ffe2108d6cf54c391fee33c8bc3646cdab"
+      - name: Build official hash baseline
+        run: |
+          set -euo pipefail
+          cmake -S upstream-randomx -B upstream-randomx/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build upstream-randomx/build --parallel 2
+          cc -O2 -I upstream-randomx/src -c nexis-randomx-v62/verify.c -o verify.o
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o baseline_rx
+          ./baseline_rx > V66_REFERENCE_HASH.txt
+          grep -Fx 'OFFICIAL_RANDOMX_V1: 4/4 PASS' V66_REFERENCE_HASH.txt
+      - name: Run modified real light VM using coherent phase-product proxy
+        run: |
+          set -euo pipefail
+          python3 nexis-randomx-v66/patch_chi2.py upstream-randomx/src/vm_interpreted.cpp
+          cmake --build upstream-randomx/build --parallel 2
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o coherent_rx
+          ./coherent_rx > V66_CHI2_HASH.txt 2> V66_CHI2_TRACE.txt
+          diff -u V66_REFERENCE_HASH.txt V66_CHI2_HASH.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('V66_CHI2_TRACE.txt').read_text().splitlines()
+          def pairs(line): return dict(x.split('=',1) for x in line.split('|')[1:])
+          summary=[pairs(l) for l in lines if l.startswith('V66_SUMMARY|')]
+          coh=[pairs(l) for l in lines if l.startswith('V66_COHERENT_CHI2_XOR3|')]
+          address=[pairs(l) for l in lines if l.startswith('V66_ADDRESS|')]
+          dataset=[pairs(l) for l in lines if l.startswith('V66_DATASET|')]
+          assert len(summary)==1 and len(coh)==1,(len(summary),len(coh))
+          expected={
+            'runs':32,'iterations':65536,'dual_calls':1048576,'triple_calls':196608,
+            'nonlinear_mix_bits':79691776,'terminal_detect_bits':73400320,'errors':0,
+            'scratchpad_calls':524288,'dataset_calls':524288,'address_calls':196608,
+            'sampled_dataset':160,'sampled_address':160
+          }
+          actual={k:int(v) for k,v in summary[0].items()}
+          assert actual==expected,(actual,expected)
+          assert coh[0]=={'pass':'8','total':'8','interstage_detection':'0','interstage_regeneration':'0'},coh
+          for which,records in [('address',address),('dataset',dataset)]:
+            assert len(records)==160,(which,len(records))
+            keys={(int(x['run']),int(x['iter'])) for x in records}
+            assert len(keys)==160
+            assert all(1<=r<=32 and i in (0,1,2,1023,2047) for r,i in keys)
+          for d in dataset:
+            assert (int(d['before'],16)^int(d['data'],16))==int(d['after'],16),d
+          print("V66_REAL_RANDOMX_FINAL_HASH: 4/4 PASS")
+          print("V66_CHI2_IDEAL_LOGIC: 79691776/79691776 PASS")
+          print("V66_TWO_STAGE_COHERENT_CHAIN: 8/8 PASS (no intermediate readout)")
+          print("V66_REGISTER_BOUNDARY_READOUT_BITS: 73400320")
+          print("V66_VM_SAMPLES: 320/320 PASS")
+          PY
+          sha256sum V66_REFERENCE_HASH.txt V66_CHI2_HASH.txt V66_CHI2_TRACE.txt
+      - name: Upload public results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexis-randomx-v66-coherent-chi2
+          path: |
+            V66_REFERENCE_HASH.txt
+            V66_CHI2_HASH.txt
+            V66_CHI2_TRACE.txt
+          if-no-files-found: ignore
