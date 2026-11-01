@@ -59,7 +59,7 @@ int main(int argc,char**argv){try{
   auto v=columns(line);if(v.size()<9)throw std::runtime_error("bad input row");
   uint64_t height=std::stoull(v[0]);uint32_t nonce=std::stoul(v[1]);Bytes expected=unhex(v[3]);
   Bytes blob=unhex(v[4]);size_t off=0;
-  auto major=read_varint(blob,off);auto minor=read_varint(blob,off);
+  read_varint(blob,off);read_varint(blob,off);
   uint64_t t=read_varint(blob,off);if(off+32+4+32>blob.size())throw std::runtime_error("blob length");
   cpp_int prev=0,merkle=0;for(int k=0;k<8;k++){prev+=cpp_int(blob[off+k])<<(8*k);merkle+=cpp_int(blob[off+32+4+k])<<(8*k);}
   size_t npos=off+32;for(int k=0;k<4;k++){if(blob[npos+k]!=uint8_t(nonce>>(8*k)))throw std::runtime_error("nonce mismatch");}
