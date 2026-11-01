@@ -1,0 +1,54 @@
+name: NEXIS-RX LAB19 exact arithmetic relationship on 100 historical Monero jobs
+on:
+  push:
+    branches: [nexis-rx-lab19-twofield-20261102]
+    paths:
+      - "nexis_rx_hist100/lab19_job_arithmetic.cpp"
+      - ".github/workflows/nexis-rx-lab19-jobs.yml"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-historic-arithmetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch 100 proven historical winning RandomX hashes
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_100_EXACT_RANDOMX_POW
+          repository: byhicc-sudo/test
+          run-id: 41355345515
+          github-token: ${{ github.token }}
+          path: input/winners
+      - name: Fetch 100 independently computed exact nonce-plus-one hashes
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_HIST100_SIMPLE_ALGORITHM_TESTS
+          repository: byhicc-sudo/test
+          run-id: 41355617209
+          github-token: ${{ github.token }}
+          path: input/neighbors
+      - name: Compile standalone native C++ arithmetic-only verifier
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libboost-dev >/dev/null
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror nexis_rx_hist100/lab19_job_arithmetic.cpp -o lab19
+          echo NATIVE_CPP_COMPILED=YES
+      - name: Test all 100 real job fields and 100 actual next-nonce hashes
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          ./lab19 input/winners/computed100.csv input/neighbors/winner_versus_nonce_plus_one.csv output/models.tsv | tee output/SUMMARY.txt
+          test "$(wc -l < output/models.tsv)" -ge 20
+          sha256sum output/models.tsv | tee output/SHA256.txt
+          cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve raw output and model definitions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXIS_RX_LAB19_JOB_ARITHMETIC_100
+          path: output/
+          if-no-files-found: ignore
