@@ -35,13 +35,16 @@ static size_t npos(const Bytes&blob){
 }
 static void setnonce(Bytes&b,size_t pos,uint32_t v){for(int k=0;k<4;k++)b[pos+k]=uint8_t(v>>(8*k));}
 static int hamming(const Bytes&a,const Bytes&b){
- if(a.size()!=b.size())throw std::runtime_error("size mismatch");int cnt=0;for(size_t i=0;i<a.size();i++)cnt+=__builtin_popcount(unsigned(a[i]^b[i]));return cnt;
+ if(a.size()!=b.size())throw std::runtime_error("size mismatch");
+ int cnt=0;for(size_t i=0;i<a.size();i++)cnt+=__builtin_popcount(unsigned(a[i]^b[i]));return cnt;
 }
 static size_t equalBytes(const Bytes&a,const Bytes&b){
- if(a.size()!=b.size())throw std::runtime_error("size mismatch");size_t eq=0;for(size_t i=0;i<a.size();i++)eq+=(a[i]==b[i]);return eq;
+ if(a.size()!=b.size())throw std::runtime_error("size mismatch");
+ size_t eq=0;for(size_t i=0;i<a.size();i++)eq+=(a[i]==b[i]);return eq;
 }
 static size_t equalLines(const Bytes&a,const Bytes&b){
- if(a.size()!=b.size()||a.size()%64)throw std::runtime_error("line size mismatch");size_t eq=0;for(size_t i=0;i<a.size();i+=64)eq+=(memcmp(a.data()+i,b.data()+i,64)==0);return eq;
+ if(a.size()!=b.size()||a.size()%64)throw std::runtime_error("line size mismatch");
+ size_t eq=0;for(size_t i=0;i<a.size();i+=64)eq+=(memcmp(a.data()+i,b.data()+i,64)==0);return eq;
 }
 struct Stage {Bytes scratch,seed,reg,spDigest;};
 struct Trace {std::vector<Stage>steps;Bytes finalHash;Bytes finalReg;};
