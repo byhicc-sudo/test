@@ -12,6 +12,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -23,13 +24,6 @@ using Masks=std::array<uint32_t,16>;
 static constexpr uint64_t IV[8]={
  0x6a09e667f3bcc908ULL,0xbb67ae8584caa73bULL,0x3c6ef372fe94f82bULL,0xa54ff53a5f1d36f1ULL,
  0x510e527fade682d1ULL,0x9b05688c2b3e6c1fULL,0x1f83d9abfb41bd6bULL,0x5be0cd19137e2179ULL};
-static constexpr uint8_t SIGMA[12][16]={
- {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15},
- {14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3},
- {11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4},
- {7,9,3,1,13,12,11,14,3,6,7,1,9,4} /* fixed explicitly below */
-};
-// Actual standard sigma expanded separately to avoid silent schedule errors.
 static constexpr uint8_t SIG[12][16]={
  {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15},
  {14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3},
@@ -120,7 +114,7 @@ static Check auditBlake(const Bytes&reg,Bytes official,unsigned*backwardWordHD=n
  for(unsigned word=0;word<32;word++){
   Bytes pert=reg;pert[word*8]^=1;
   Bytes after(32);if(blake2b(after.data(),32,pert.data(),pert.size(),nullptr,0))throw std::runtime_error("Blake pert");
-  changedTop+=(memcmp(after.data()+27,official.data()+27,5)!=0);
+  changedTop+=(((after[27]^official[27])&0xfc)!=0 || memcmp(after.data()+28,official.data()+28,4)!=0);
   changedAll+=(after!=official);
  }
  result.wordTarget=changedTop;result.wordFull=changedAll;
@@ -131,6 +125,7 @@ int main(int argc,char**argv){try{
  std::ifstream wins(argv[1]),neis(argv[2]);if(!wins||!neis)throw std::runtime_error("input missing");
  std::string line;std::getline(wins,line);
  unsigned count=0,realpass=0,neighborfail=0,winPrefixPass=0,neighborPrefixPass=0;
+ std::map<std::string,cpp_int> historicDiff;std::map<std::string,std::string> winnerHash;
  unsigned baselineRequired=0;Bytes baseBlob,expected;uint32_t knownNonce=0;
  cpp_int basediff=0;
  while(std::getline(wins,line)){
@@ -139,15 +134,18 @@ int main(int argc,char**argv){try{
   Bytes hash=unhex(a[3]);if(hash.size()!=32)throw std::runtime_error("hash size");
   auto val=toint(hash);bool pass=val*diff<=(cpp_int(1)<<256)-1;
   realpass+=pass;unsigned need=requiredZero(diff);winPrefixPass+=(leadingzero(hash)>=int(need));
+  historicDiff[a[0]]=diff;winnerHash[a[0]]=a[3];
   if(count==0){baseBlob=unhex(a[4]);expected=hash;knownNonce=std::stoul(a[1]);basediff=diff;baselineRequired=need;}
   count++;
  }
  std::getline(neis,line);while(std::getline(neis,line)){
   if(line.empty())continue;auto a=split(line);if(a.size()<8)throw std::runtime_error("neighbor columns");
   if(a[0]=="3300100"&&a[1]!=std::to_string(knownNonce))throw std::runtime_error("neighbor index");
-  Bytes hash=unhex(a[3]);cpp_int d=basediff; // historic difficulty similar, but use exact per-row mapping below if needed
-  // Neighbor PoW validity is verified in its original LAB20/LAB19 archive.
-  (void)hash;(void)d;neighborfail++; 
+  auto it=historicDiff.find(a[0]);if(it==historicDiff.end())throw std::runtime_error("neighbor unknown height");
+  if(winnerHash.at(a[0])!=a[2])throw std::runtime_error("neighbor/winner mismatch");
+  Bytes hash=unhex(a[3]);const cpp_int& d=it->second;
+  if(toint(hash)*d>(cpp_int(1)<<256)-1)neighborfail++;
+  neighborPrefixPass+=(leadingzero(hash)>=int(requiredZero(d)));
  }
  if(count!=100||realpass!=100||winPrefixPass!=100||neighborfail!=100)throw std::runtime_error("historic data mismatch");
  Bytes seed=unhex(argv[3]);if(seed.size()!=32||baseBlob.size()!=76)throw std::runtime_error("seed/blob invalid");
@@ -156,7 +154,7 @@ int main(int argc,char**argv){try{
  randomx_init_cache(cache,seed.data(),seed.size());auto*vm=randomx_create_vm(RANDOMX_FLAG_DEFAULT,cache,nullptr);
  if(!vm)throw std::runtime_error("vm");
  std::ofstream out(argv[4]),sum(argv[5]);if(!out||!sum)throw std::runtime_error("open output");
- out<<"sample,nonce,full_randomx_matches_official,manual_blake256_matches,reverse_12_rounds_exact,register_words_affect_high40_bits,register_words_affect_full_hash,hash_lz\n";
+ out<<"sample,nonce,full_randomx_matches_official,manual_blake256_matches,reverse_12_rounds_exact,register_words_affect_high38_bits,register_words_affect_full_hash,hash_lz\n";
  unsigned hashExact=0,manualExact=0,reversed=0,wordTarget=0,wordFull=0,targetHits=0;
  for(unsigned sample=0;sample<16;sample++){
   Bytes blob=baseBlob;uint32_t nonce=knownNonce+sample;setnonce(blob,pos,nonce);
@@ -185,12 +183,13 @@ int main(int argc,char**argv){try{
  auto write=[&](const std::string&s){std::cout<<s<<"\n";sum<<s<<"\n";};
  write("HISTORIC_NETWORK_WINNERS_EXACT=100/100");
  write("HISTORIC_WINNER_REQUIRED_ZERO_PREFIX_ALL_MATCH=100/100");
- write("NONWINNER_VALIDATION_INPUTS=100 (originally verified in LAB20 artifact)");
+ write("HISTORIC_NONCE_PLUS_ONE_REJECTED_BY_NETWORK_TARGET="+std::to_string(neighborfail)+"/100");
+ write("HISTORIC_NONCE_PLUS_ONE_PASS_NECESSARY_ZERO_PREFIX="+std::to_string(neighborPrefixPass)+"/100");
  write("BLOCK_3300100_DIFFICULTY="+basediff.convert_to<std::string>()+" HIGH_ZERO_BITS_NECESSARY="+std::to_string(baselineRequired));
  write("ACTUAL_REPRODUCED_RANDOMX_256BIT=16/16");
  write("BLAKE2B_MANUAL_TWO_BLOCK_FORWARD_EXACT="+std::to_string(manualExact)+"/16");
  write("BLAKE2B_LAST_12_ROUNDS_REVERSED_EXACT="+std::to_string(reversed)+"/16");
- write("FINAL_REGISTER_WORDS_PERTURBED=512 HIGH_40_OUTPUT_BITS_CHANGED="+std::to_string(wordTarget)+"/512 FULL_OUTPUT_CHANGED="+std::to_string(wordFull)+"/512");
+ write("FINAL_REGISTER_WORDS_PERTURBED=512 HIGH_38_OUTPUT_BITS_CHANGED="+std::to_string(wordTarget)+"/512 FULL_OUTPUT_CHANGED="+std::to_string(wordFull)+"/512");
  write("HASHES_WITH_REQUIRED_HIGH_ZERO_PREFIX_AMONG_16="+std::to_string(targetHits)+"/16 (winner included)");
  for(unsigned i=0;i<deps.size();i++)write("STATIC_TAINT_LAST_BLAKE_ROUND_"+std::to_string(i)+"_POSSIBLE_INPUT_WORDS_FOR_TARGET_H3="+std::to_string(deps[i])+"/32");
  write("CAVEAT=STATIC_TAINT_IS_CONSERVATIVE; exact inverse needs all 16x64-bit state words and known message; target supplies only high-bit inequality, no nonce predictor proven.");
