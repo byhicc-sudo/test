@@ -2,7 +2,7 @@ name: NEXIS-RX LAB15 real RandomX interpreter benchmark
 on:
   push:
     branches:
-      - nexis-rx-lab15-real-20261102
+      - nexis-rx-lab16-linear-answerkey
     paths:
       - "nexis_lab15/**"
       - ".github/workflows/nexis-rx-lab15-real.yml"
