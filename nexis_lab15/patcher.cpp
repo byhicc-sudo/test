@@ -19,8 +19,8 @@ int main(int argc,char**argv){
  replace_once(s,needle,repl);write(path,s);
  if(which=="alternative"){
   path=root+"/src/vm_interpreted.cpp";s=read(path);
-  replace_once(s,"namespace randomx {\n","namespace randomx {\n"+read("nexis_lab15/fp.inc")+"\n");
-  replace_once(s,"\t\tcompileProgram(program, bytecode, nreg);","\t\tcompileProgram(program, bytecode, nreg);\n\t\tnexisAnswerKeyFP(bytecode, nreg);");
+  replace_once(s,"namespace randomx {\n","#include <cstdlib>\nnamespace randomx {\n"+read("nexis_lab15/fp.inc")+"\n");
+  replace_once(s,"\t\tcompileProgram(program, bytecode, nreg);","\t\tcompileProgram(program, bytecode, nreg);\n\t\tif(std::getenv(\"NEXIS_FP_ON\")) nexisAnswerKeyFP(bytecode, nreg);");
   write(path,s);
  }
  std::cout<<"PATCH_OK "<<which<<"\n";
