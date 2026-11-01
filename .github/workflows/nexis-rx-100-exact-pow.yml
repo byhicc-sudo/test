@@ -1,0 +1,68 @@
+name: NEXIS-RX exact RandomX verification of 100 historical blocks
+on:
+  push:
+    branches: [nexis-rx-historical100-20261102]
+    paths: [.github/workflows/nexis-rx-100-exact-pow.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download previously verified 100 authentic block blobs
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_100_REAL_BLOCKS
+          repository: byhicc-sudo/test
+          run-id: 41354587916
+          github-token: ${{ github.token }}
+          path: input
+      - name: Confirm downloaded dataset contents
+        run: |
+          set -euo pipefail
+          jq -e 'length==100' input/full100.json
+          test "$(jq '[.[] | select(.height>=3300100 and .height<=3300199)]|length' input/full100.json)" = 100
+          wc -c input/full100.json
+          jq '.[0] | {height,nonce,major_version,minor_version,miner_tx_hash,tx_hashes_length:(.tx_hashes|length),difficulty}' input/full100.json
+      - name: Install Keccak C++ dependency, compile pinned RandomX reference
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libcrypto++-dev > /dev/null
+          PIN=102f8acf90a7649ada410de5499a7ec62e49e1da
+          git clone -q https://github.com/tevador/RandomX.git official
+          git -C official checkout -q "$PIN"
+          test "$(git -C official rev-parse HEAD)" = "$PIN"
+          cmake -S official -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
+          cmake --build build --target randomx -j 2
+          g++ -std=c++17 -O3 -Wall -Wextra -Iofficial/src nexis_rx_hist100/analyze.cpp build/librandomx.a -lcryptopp -pthread -o nexis_hist_analyze
+          echo "CPP_COMPILED=YES"
+      - name: Download exact period's public RandomX seed block hash
+        run: |
+          set -euo pipefail
+          node=$(cat input/node.txt)
+          payload='{"jsonrpc":"2.0","id":"seed","method":"get_block_header_by_height","params":{"height":3299328}}'
+          curl -fsS --retry 3 --max-time 45 -H 'Content-Type: application/json' -d "$payload" "$node/json_rpc" > input/seed.json
+          jq -er '.result.block_header.hash|select(length==64)' input/seed.json > input/seed_hash.txt
+          echo "HISTORICAL_SEED_HEIGHT=3299328"
+          echo "HISTORICAL_SEED_HASH=$(cat input/seed_hash.txt)"
+      - name: Reconstruct 100 PoW blobs and independently verify RandomX network difficulty
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          jq -r '.[]|[(.height|tostring),.hash,.prev_hash, (.nonce|tostring),(.timestamp|tostring),(.major_version|tostring),(.minor_version|tostring),.miner_tx_hash,((.tx_hashes // [])|join(",")), .difficulty, (.pow_hash // "")]|@tsv' input/full100.json > output/records.tsv
+          ./nexis_hist_analyze output/records.tsv "$(cat input/seed_hash.txt)" output/computed100.csv | tee output/SUMMARY.txt
+          head -n 3 output/computed100.csv
+          tail -n 2 output/computed100.csv
+          echo "EXACT_100_RANDOMX_COMPLETED"
+          sha256sum output/computed100.csv | tee output/SHA256.txt
+      - name: Upload independently verified 100 full RandomX hashes and input blobs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXIS_RX_100_EXACT_RANDOMX_POW
+          path: output/
+          if-no-files-found: ignore
