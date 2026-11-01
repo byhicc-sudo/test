@@ -35,7 +35,7 @@ int main(int argc,char**argv){try{
  uint64_t height=std::stoull(v[0]);std::string blockid=v[1];Bytes prev=dec(v[2]);uint32_t nonce=std::stoul(v[3]);uint64_t timestamp=std::stoull(v[4]);uint64_t major=std::stoull(v[5]);uint64_t minor=std::stoull(v[6]);std::vector<Bytes>leaves{dec(v[7])};if(!v[8].empty())for(const auto&h:split(v[8],','))leaves.push_back(dec(h));
  cpp_int diff=readHexInt(v[9]);if(diff==0)throw std::runtime_error("zero diff");
  Bytes blob;varint(blob,major);varint(blob,minor);varint(blob,timestamp);blob.insert(blob.end(),prev.begin(),prev.end());for(int k=0;k<4;k++)blob.push_back(uint8_t(nonce>>(8*k)));Bytes root=treehash(leaves);blob.insert(blob.end(),root.begin(),root.end());varint(blob,leaves.size());
- auto calculatedId=enc(khash(blob));if(calculatedId!=blockid){std::cerr<<"BAD_BLOCK_ID height="<<height<<" calc="<<calculatedId<<" want="<<blockid<<" leaves="<<leaves.size()<<" blob="<<enc(blob)<<"\n";return 4;}
+ Bytes idblob;varint(idblob,blob.size());idblob.insert(idblob.end(),blob.begin(),blob.end());auto calculatedId=enc(khash(idblob));if(calculatedId!=blockid){std::cerr<<"BAD_BLOCK_ID height="<<height<<" calc="<<calculatedId<<" want="<<blockid<<" leaves="<<leaves.size()<<" blob="<<enc(blob)<<"\n";return 4;}
  blockIdsOK++;
  Bytes pow(32);randomx_calculate_hash(vm,blob.data(),blob.size(),pow.data());cpp_int h=leInt(pow);bool pass=(h*diff < (cpp_int(1)<<256));powPass+=pass;
  int lz=0;for(int q=31;q>=0;q--){if(pow[q]==0){lz+=8;continue;}lz+=__builtin_clz(unsigned(pow[q]))-24;break;}
