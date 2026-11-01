@@ -31,7 +31,7 @@ int main(int argc,char**argv){try{
  out<<"height,nonce,block_id,pow_hash,hashing_blob,hashing_blob_bytes,difficulty,leading_zero_bits,hamming_from_prior\n";
  auto*cache=randomx_alloc_cache(RANDOMX_FLAG_DEFAULT);if(!cache)throw std::runtime_error("alloc cache");randomx_init_cache(cache,seed.data(),seed.size());auto*vm=randomx_create_vm(RANDOMX_FLAG_DEFAULT,cache,nullptr);if(!vm)throw std::runtime_error("create vm");
  unsigned count=0,blockIdsOK=0,powPass=0;int minLz=256,maxLz=0;unsigned long long sumHamming=0;Bytes prior;
- std::string line;while(std::getline(f,line)){if(line.empty())continue;auto v=split(line,'\t');if(v.size()!=11)throw std::runtime_error("wrong columns "+std::to_string(v.size()));
+ std::string line;while(std::getline(f,line)){if(line.empty())continue;auto v=split(line,'\t');if(v.size()<10)throw std::runtime_error("wrong columns "+std::to_string(v.size()));
  uint64_t height=std::stoull(v[0]);std::string blockid=v[1];Bytes prev=dec(v[2]);uint32_t nonce=std::stoul(v[3]);uint64_t timestamp=std::stoull(v[4]);uint64_t major=std::stoull(v[5]);uint64_t minor=std::stoull(v[6]);std::vector<Bytes>leaves{dec(v[7])};if(!v[8].empty())for(const auto&h:split(v[8],','))leaves.push_back(dec(h));
  cpp_int diff=readHexInt(v[9]);if(diff==0)throw std::runtime_error("zero diff");
  Bytes blob;varint(blob,major);varint(blob,minor);varint(blob,timestamp);blob.insert(blob.end(),prev.begin(),prev.end());for(int k=0;k<4;k++)blob.push_back(uint8_t(nonce>>(8*k)));Bytes root=treehash(leaves);blob.insert(blob.end(),root.begin(),root.end());varint(blob,leaves.size());
