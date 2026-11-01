@@ -186,7 +186,7 @@ int main(int argc,char**argv){try{
  write("HISTORIC_NONCE_PLUS_ONE_REJECTED_BY_NETWORK_TARGET="+std::to_string(neighborfail)+"/100");
  write("HISTORIC_NONCE_PLUS_ONE_PASS_NECESSARY_ZERO_PREFIX="+std::to_string(neighborPrefixPass)+"/100");
  write("BLOCK_3300100_DIFFICULTY="+basediff.convert_to<std::string>()+" HIGH_ZERO_BITS_NECESSARY="+std::to_string(baselineRequired));
- write("ACTUAL_REPRODUCED_RANDOMX_256BIT=16/16");
+ write("ACTUAL_REPRODUCED_RANDOMX_256BIT="+std::to_string(hashExact)+"/16");
  write("BLAKE2B_MANUAL_TWO_BLOCK_FORWARD_EXACT="+std::to_string(manualExact)+"/16");
  write("BLAKE2B_LAST_12_ROUNDS_REVERSED_EXACT="+std::to_string(reversed)+"/16");
  write("FINAL_REGISTER_WORDS_PERTURBED=512 HIGH_38_OUTPUT_BITS_CHANGED="+std::to_string(wordTarget)+"/512 FULL_OUTPUT_CHANGED="+std::to_string(wordFull)+"/512");
