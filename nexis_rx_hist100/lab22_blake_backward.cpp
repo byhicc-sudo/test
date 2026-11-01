@@ -69,7 +69,6 @@ static void gmask(Masks&v,const uint32_t*m,int r,int i){
  v[a]|=v[b]|m[SIG[r][i*2]];v[d]|=v[a];v[c]|=v[d];v[b]|=v[c];
  v[a]|=v[b]|m[SIG[r][i*2+1]];v[d]|=v[a];v[c]|=v[d];v[b]|=v[c];
 }
-static std::string fmtHex(const Bytes&b){const char d[]="0123456789abcdef";std::string s;for(auto x:b){s+=d[x>>4];s+=d[x&15];}return s;}
 static Bytes unhex(const std::string&s){if(s.size()%2)throw std::runtime_error("hex len");auto nib=[](char c)->int{if(c>='0'&&c<='9')return c-'0';if(c>='a'&&c<='f')return c-'a'+10;if(c>='A'&&c<='F')return c-'A'+10;throw std::runtime_error("bad hex");};Bytes b;for(size_t i=0;i<s.size();i+=2)b.push_back(uint8_t(nib(s[i])*16+nib(s[i+1])));return b;}
 static std::vector<std::string> split(const std::string&s){std::istringstream f(s);std::vector<std::string>v;std::string x;while(std::getline(f,x,','))v.push_back(x);return v;}
 static cpp_int numhex(std::string s){if(s.substr(0,2)=="0x")s.erase(0,2);cpp_int x=0;for(char c:s){int d=(c>='0'&&c<='9')?c-'0':c-'a'+10;if(d<0||d>15)throw std::runtime_error("bad diff");x=(x<<4)+d;}return x;}
@@ -129,7 +128,8 @@ int main(int argc,char**argv){try{
  unsigned baselineRequired=0;Bytes baseBlob,expected;uint32_t knownNonce=0;
  cpp_int basediff=0;
  while(std::getline(wins,line)){
-  if(line.empty())continue;auto a=split(line);if(a.size()<9)throw std::runtime_error("winner columns");
+  if(line.empty())continue;
+  auto a=split(line);if(a.size()<9)throw std::runtime_error("winner columns");
   cpp_int diff=numhex(a[6]);if(diff<=0)throw std::runtime_error("bad difficulty");
   Bytes hash=unhex(a[3]);if(hash.size()!=32)throw std::runtime_error("hash size");
   auto val=toint(hash);bool pass=val*diff<=(cpp_int(1)<<256)-1;
@@ -139,7 +139,8 @@ int main(int argc,char**argv){try{
   count++;
  }
  std::getline(neis,line);while(std::getline(neis,line)){
-  if(line.empty())continue;auto a=split(line);if(a.size()<8)throw std::runtime_error("neighbor columns");
+  if(line.empty())continue;
+  auto a=split(line);if(a.size()<8)throw std::runtime_error("neighbor columns");
   if(a[0]=="3300100"&&a[1]!=std::to_string(knownNonce))throw std::runtime_error("neighbor index");
   auto it=historicDiff.find(a[0]);if(it==historicDiff.end())throw std::runtime_error("neighbor unknown height");
   if(winnerHash.at(a[0])!=a[2])throw std::runtime_error("neighbor/winner mismatch");
