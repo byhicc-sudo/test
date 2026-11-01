@@ -1,0 +1,38 @@
+name: NEXIS RandomX V62 official reference verification
+on:
+  push:
+    branches:
+      - nexis-randomx-v62-verify
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout public test harness
+        uses: actions/checkout@v4
+      - name: Get pinned official RandomX v1.2.3
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.2.3 https://github.com/tevador/RandomX.git upstream-randomx
+          echo "UPSTREAM_COMMIT=$(git -C upstream-randomx rev-parse HEAD)"
+          test "$(git -C upstream-randomx describe --tags --exact-match HEAD)" = v1.2.3
+      - name: Build official RandomX
+        run: |
+          set -euo pipefail
+          cmake -S upstream-randomx -B upstream-randomx/build -DCMAKE_BUILD_TYPE=Release -DARCH=native
+          cmake --build upstream-randomx/build --parallel 2
+      - name: Compile and run reference hash comparisons
+        run: |
+          set -euo pipefail
+          cc -O2 -I upstream-randomx/src -c nexis-randomx-v62/verify.c -o verify.o
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o verify_randomx
+          ./verify_randomx | tee RANDOMX_V62_RESULT.txt
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: randomx-v62-reference-result
+          path: RANDOMX_V62_RESULT.txt
+          if-no-files-found: ignore
