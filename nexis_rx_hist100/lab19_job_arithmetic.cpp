@@ -25,7 +25,8 @@ struct Row {
 };
 static std::vector<std::string> fields(const std::string&s){
  std::stringstream ss(s);std::string word;std::vector<std::string>v;
- while(std::getline(ss,word,','))v.push_back(word);return v;
+ while(std::getline(ss,word,','))v.push_back(word);
+ return v;
 }
 static unsigned hexdigit(char c){
  if(c>='0'&&c<='9')return unsigned(c-'0');
@@ -96,7 +97,8 @@ int main(int argc,char**argv){
  std::map<unsigned,Row> data;
  std::string line;std::getline(f,line);
  while(std::getline(f,line)){
- if(line.empty())continue;auto z=fields(line);
+ if(line.empty())continue;
+ auto z=fields(line);
  if(z.size()<8)throw std::runtime_error("winning CSV columns");
  Row r;r.height=std::stoul(z[0]);r.nonce=std::stoul(z[1]);r.winningHex=z[3];
  auto h=unhex(z[3]);if(h.size()!=32)throw std::runtime_error("bad RandomX 256-bit hash");
@@ -113,7 +115,8 @@ int main(int argc,char**argv){
  std::ifstream g(argv[2]);if(!g)throw std::runtime_error("missing neighbor hash csv");
  std::getline(g,line);unsigned neighbors=0;
  while(std::getline(g,line)){
- if(line.empty())continue;auto z=fields(line);
+ if(line.empty())continue;
+ auto z=fields(line);
  if(z.size()<4)throw std::runtime_error("neighbor CSV columns");
  unsigned h=std::stoul(z[0]);auto it=data.find(h);if(it==data.end())throw std::runtime_error("neighbor height missing");
  auto b=unhex(z[3]);if(b.size()!=32)throw std::runtime_error("bad neighbor hash");
