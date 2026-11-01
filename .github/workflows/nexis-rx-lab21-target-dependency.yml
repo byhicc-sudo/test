@@ -1,0 +1,53 @@
+name: NEXIS-RX LAB21 exact intermediate and target dependency analysis
+on:
+  push:
+    branches: [nexis-rx-lab21-target-dependency-20261102]
+    paths:
+      - "nexis_rx_hist100/lab21_chain_dependency.cpp"
+      - ".github/workflows/nexis-rx-lab21-target-dependency.yml"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get actual previously verified block 3300100 hashing blob
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_100_EXACT_RANDOMX_POW
+          repository: byhicc-sudo/test
+          run-id: 41355345515
+          github-token: ${{ github.token }}
+          path: input
+      - name: Compile pinned official RandomX C++ with exposed intermediate VM stages
+        run: |
+          set -euo pipefail
+          PIN=102f8acf90a7649ada410de5499a7ec62e49e1da
+          git clone -q https://github.com/tevador/RandomX.git upstream
+          git -C upstream checkout -q "$PIN"
+          test "$(git -C upstream rev-parse HEAD)" = "$PIN"
+          cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
+          cmake --build build --target randomx -j 2
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Iupstream/src nexis_rx_hist100/lab21_chain_dependency.cpp build/librandomx.a -pthread -o lab21
+          echo NATIVE_CPP_BUILD=OK
+      - name: Trace exact 8-program chain, 2MiB scratchpad and register-to-final-hash dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
+          ./lab21 input/computed100.csv "$SEED" output/chain_stages.csv output/final_register_perturbation.csv | tee output/SUMMARY.txt
+          test "$(wc -l < output/chain_stages.csv)" = 145
+          test "$(wc -l < output/final_register_perturbation.csv)" = 33
+          grep -F 'OFFICIAL_HASH_EXACT=16/16' output/SUMMARY.txt
+          sha256sum output/*.csv > output/SHA256.txt
+          cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload complete dependency experiment for independent verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXIS_RX_LAB21_REAL_RANDOMX_DEPENDENCY
+          path: output/
+          if-no-files-found: ignore
