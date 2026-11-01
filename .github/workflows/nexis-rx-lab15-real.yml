@@ -1,0 +1,105 @@
+name: NEXIS-RX LAB15 real RandomX interpreter benchmark
+on:
+  push:
+    branches:
+      - nexis-rx-lab15-real-20261102
+    paths:
+      - "nexis_lab15/**"
+      - ".github/workflows/nexis-rx-lab15-real.yml"
+permissions:
+  contents: read
+jobs:
+  measure:
+    name: Native C++ exact hashes and H/s
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout isolated benchmark branch
+        uses: actions/checkout@v4
+      - name: Install isolated pinned official RandomX v1.2.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIN=102f8acf90a7649ada410de5499a7ec62e49e1da
+          git clone -q https://github.com/tevador/RandomX.git official
+          git -C official checkout -q "$PIN"
+          test "$(git -C official rev-parse HEAD)" = "$PIN"
+          test "$(git hash-object official/src/bytecode_machine.hpp)" = "5e82e0d3713269ffd6bb1c37968af1e0150c9fa5"
+          test "$(git hash-object official/src/vm_interpreted.cpp)" = "64243c3ec3191a6927bdf0efd3501af2ffde1311"
+          cp -a official reference
+          cp -a official legacy
+          cp -a official alternative
+          echo "OFFICIAL_PIN_SHA_OK $PIN"
+          uname -a
+          lscpu | grep -E 'Model name|CPU\(s\)|Thread\(s\)|L3 cache' || true
+      - name: Apply only isolated LAB15 C++ patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror nexis_lab15/patcher.cpp -o patcher
+          ./patcher legacy legacy
+          ./patcher alternative alternative
+          echo "REFERENCE_UNMODIFIED=YES"
+      - name: Build three separate native C++ RandomX interpreters
+        shell: bash
+        run: |
+          set -euo pipefail
+          for motor in reference legacy alternative; do
+            cmake -S nexis_lab15 -B "build_$motor" -G Ninja -DRX_SRC="$PWD/$motor" -DCMAKE_BUILD_TYPE=Release -DARCH=native
+            cmake --build "build_$motor" --target nexis_lab15 -j 2
+          done
+      - name: Verify official five v1.2.1 reference hashes on all three engines
+        shell: bash
+        run: |
+          set -euo pipefail
+          for motor in reference legacy alternative; do
+            "build_$motor/nexis_lab15" vectors
+          done
+          echo "OFFICIAL_VECTORS_MATCH=15/15"
+      - name: Benchmark 3 rounds of 64 unique deterministic nonces per motor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          for rep in 1 2 3; do
+            if [ "$rep" = 1 ]; then order="reference legacy alternative"; fi
+            if [ "$rep" = 2 ]; then order="legacy alternative reference"; fi
+            if [ "$rep" = 3 ]; then order="alternative reference legacy"; fi
+            for motor in $order; do
+              "build_$motor/nexis_lab15" bench 64 > "output/$motor-$rep.txt"
+              printf "MEASURE ROUND=%s MOTOR=%s " "$rep" "$motor"
+              grep '^METRIC|' "output/$motor-$rep.txt"
+            done
+            for motor in legacy alternative; do
+              grep '^H|' "output/reference-$rep.txt" > "output/ref_hashes_$rep.txt"
+              grep '^H|' "output/$motor-$rep.txt" > "output/$motor-hashes_$rep.txt"
+              cmp "output/ref_hashes_$rep.txt" "output/$motor-hashes_$rep.txt"
+            done
+            echo "EXACT_MATCH ROUND=$rep 64/64 PER ENGINE"
+          done
+          echo "EXACT_HASH_MATCH=192/192 legacy; 192/192 alternative"
+          for motor in reference legacy alternative; do
+            echo "MOTOR=$motor"
+            grep '^METRIC|' output/$motor-*.txt | sed 's/.*METRIC|/METRIC|/'
+          done
+      - name: Print median H/s and complete output summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "# NEXIS-RX LAB15 native RandomX result"
+            echo "Commit 102f8acf90a7649ada410de5499a7ec62e49e1da; light-mode interpreter; three separate builds; 64 unique hashes per round."
+            echo "Official vectors: 15/15 correct; exact deterministic hashes: all three match 192/192 per motor."
+            for motor in reference legacy alternative; do
+              rates=$(for file in output/$motor-*.txt; do grep '^METRIC|' "$file" | cut -d'|' -f4; done | sort -n)
+              median=$(printf "%s\n" "$rates" | sed -n '2p')
+              echo "$motor median_hps=$median"
+            done
+          } | tee output/SUMMARY.txt | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload reproducible raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexis-rx-lab15-real-results
+          path: output/
+          if-no-files-found: ignore
