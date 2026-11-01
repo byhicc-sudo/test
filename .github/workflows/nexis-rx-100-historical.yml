@@ -1,0 +1,88 @@
+name: NEXIS-RX historical 100-block PoW study
+on:
+  push:
+    branches: [nexis-rx-historical100-20261102]
+    paths: [.github/workflows/nexis-rx-100-historical.yml]
+permissions:
+  contents: read
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe nodes and retrieve 100 authentic historical Monero headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p result/blocks
+          for node in 'https://node.xmr.surf' 'https://xmr.0xrpc.io' 'https://xmr-01.tari.com' 'https://monero.rs:18081' 'https://node.monero.fail'; do
+            echo "PROBE $node"
+            payload='{"jsonrpc":"2.0","id":"nexis100","method":"get_block_headers_range","params":{"start_height":3300100,"end_height":3300199,"fill_pow_hash":false}}'
+            if curl -fsS --connect-timeout 8 --max-time 35 -H 'Content-Type: application/json' --data "$payload" "$node/json_rpc" > result/headers.json; then
+              count=$(jq -r '.result.headers|length // 0' result/headers.json 2>/dev/null || echo 0)
+              status=$(jq -r '.result.status // "unknown"' result/headers.json 2>/dev/null || echo none)
+              echo "NODE_REPLY $node status=$status count=$count"
+              if [ "$count" = '100' ] && [ "$status" = OK ]; then echo "$node" > result/node.txt; break; fi
+            fi
+          done
+          test -s result/node.txt
+          jq -e '.result.headers|length==100' result/headers.json
+          jq -c '.result.headers[] | {height,hash,prev_hash,nonce,timestamp,difficulty,wide_difficulty,num_txes,major_version,minor_version,miner_tx_hash,pow_hash}' result/headers.json > result/headers100.jsonl
+          echo 'HEADERS_100_OK'
+      - name: Retrieve 100 full blocks and reported PoW hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node=$(cat result/node.txt)
+          : > result/getblock_status.tsv
+          for h in $(seq 3300100 3300199); do
+            payload="{\"jsonrpc\":\"2.0\",\"id\":\"nexis100\",\"method\":\"get_block\",\"params\":{\"height\":$h,\"fill_pow_hash\":true}}"
+            ok=0
+            for attempt in 1 2; do
+              if curl -fsS --connect-timeout 8 --max-time 50 -H 'Content-Type: application/json' --data "$payload" "$node/json_rpc" > "result/blocks/$h.json"; then
+                if jq -e --argjson h "$h" '.result.block_header.height==$h and ((.result.blob // "")|length>80) and (.result.status=="OK")' "result/blocks/$h.json" >/dev/null;then ok=1;break;fi
+              fi
+              sleep 0.4
+            done
+            if [ "$ok" = 0 ];then echo "BLOCK_MISSING $h";rm -f "result/blocks/$h.json";fi
+            printf '%s\t%s\n' "$h" "$ok" >> result/getblock_status.tsv
+            if [ $((h%10)) = 0 ];then echo "COLLECTED_BLOCK_HEIGHT=$h ok=$ok";fi
+            sleep 0.10
+          done
+          ok=$(awk '$2==1{c++}END{print c+0}' result/getblock_status.tsv)
+          echo "FULL_BLOCK_OK=$ok/100"
+          jq -s '[.[]|.result|{height:.block_header.height,hash:.block_header.hash,prev_hash:.block_header.prev_hash,nonce:.block_header.nonce,timestamp:.block_header.timestamp,difficulty:.block_header.wide_difficulty,major_version:.block_header.major_version,minor_version:.block_header.minor_version,num_txes:.block_header.num_txes,miner_tx_hash:.miner_tx_hash,tx_hashes:(.json|fromjson|.tx_hashes),blob:.blob,pow_hash:.block_header.pow_hash}] | sort_by(.height)' result/blocks/*.json > result/full100.json
+          jq -r '"HEIGHT\tHEADER_HASH\tPREVIOUS_HASH\tNONCE\tTIMESTAMP\tDIFFICULTY\tTX_COUNT\tPOW_HASH", (.[]|[.height,.hash,.prev_hash,.nonce,.timestamp,.difficulty,.num_txes,.pow_hash]|@tsv)' result/full100.json > result/blocks100.tsv
+          echo "POW_HASH_PRESENT=$(jq '[.[]|select((.pow_hash // "")|length==64)]|length' result/full100.json)"
+          echo "FIRST_BLOCK=$(jq -c '.[0]|{height,nonce,hash,pow_hash,num_txes}' result/full100.json)"
+          echo "LAST_BLOCK=$(jq -c '.[-1]|{height,nonce,hash,pow_hash,num_txes}' result/full100.json)"
+      - name: Verify continuity and document exact reusable job fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --slurpfile d result/full100.json '$d[0] as $b | {
+            collected:($b|length),
+            unique_nonces:([$b[].nonce]|unique|length),
+            unique_previous_hashes:([$b[].prev_hash]|unique|length),
+            unique_block_ids:([$b[].hash]|unique|length),
+            unique_coinbase_hashes:([$b[].miner_tx_hash]|unique|length),
+            unique_pow_hashes:([$b[].pow_hash|select(. != null and . != "")]|unique|length),
+            seed_height:3299328,
+            first_height:($b|first|.height),
+            last_height:($b|last|.height),
+            nonce_examples:[$b[0:8][]|.nonce],
+            missing:(100-($b|length)),
+            chained:([range(1;($b|length)) as $i | select($b[$i].prev_hash!=$b[$i-1].hash)]|length==0),
+            versions:([$b[].major_version]|unique),
+            elapsed_seconds:(($b|last|.timestamp)-($b|first|.timestamp))
+          }' > result/summary.json
+          cat result/summary.json
+          echo 'NOTE: historical pool job_id, share difficulty, extranonce assignment not on chain; block ID != PoW hash'
+      - name: Upload complete historical evidence and extracted fields
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXIS_RX_100_REAL_BLOCKS
+          path: result/
+          if-no-files-found: ignore
