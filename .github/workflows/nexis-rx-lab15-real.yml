@@ -91,7 +91,7 @@ jobs:
             echo "Commit 102f8acf90a7649ada410de5499a7ec62e49e1da; light-mode interpreter; three separate builds; 64 unique hashes per round."
             echo "Official vectors: 15/15 correct; exact deterministic hashes: all three match 192/192 per motor."
             for motor in reference legacy alternative; do
-              rates=$(for file in output/$motor-*.txt; do grep '^METRIC|' "$file" | cut -d'|' -f4; done | sort -n)
+              rates=$(for file in output/$motor-[123].txt; do grep '^METRIC|' "$file" | cut -d'|' -f4; done | sort -n)
               median=$(printf "%s\n" "$rates" | sed -n '2p')
               echo "$motor median_hps=$median"
             done
