@@ -1,0 +1,54 @@
+name: NEXIS-RX simple addition subtraction multiplication on 100 real blocks
+on:
+  push:
+    branches: [nexis-rx-hist100-arithmetic-20261102]
+    paths:
+      - "nexis_rx_hist100/arithmetic.cpp"
+      - ".github/workflows/nexis-rx-historical-arithmetic.yml"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  arithmetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get 100 previously verified authentic RandomX winning inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_100_EXACT_RANDOMX_POW
+          repository: byhicc-sudo/test
+          run-id: 41355345515
+          github-token: ${{ github.token }}
+          path: input
+      - name: Pin official RandomX and compile native C++ arithmetic analyzer
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libboost-dev >/dev/null
+          PIN=102f8acf90a7649ada410de5499a7ec62e49e1da
+          git clone -q https://github.com/tevador/RandomX.git upstream
+          git -C upstream checkout -q "$PIN"
+          test "$(git -C upstream rev-parse HEAD)" = "$PIN"
+          cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
+          cmake --build build --target randomx -j 2
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Iupstream/src nexis_rx_hist100/arithmetic.cpp build/librandomx.a -pthread -o arithmetic
+          echo "NATIVE_CPP_BUILD_OK"
+      - name: Calculate 500 authentic RandomX results and test elementary arithmetic hypotheses
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
+          ./arithmetic input/computed100.csv "$SEED" output/arithmetic_100blocks.csv | tee output/SUMMARY.txt
+          test "$(wc -l < output/arithmetic_100blocks.csv)" = 101
+          grep -F 'TESTED_BLOCKS=100 VERIFIED_HISTORICAL_HASHES=100 EVALUATED_FULL_RANDOMX_HASHES=500' output/SUMMARY.txt
+          sha256sum output/arithmetic_100blocks.csv | tee output/SHA256.txt
+          cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload raw measurements and reproducible C++ results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXIS_RX_100_SIMPLE_ADD_SUBTRACT_MULTIPLY
+          path: output/
+          if-no-files-found: ignore
