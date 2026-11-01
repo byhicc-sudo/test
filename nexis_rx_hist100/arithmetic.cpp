@@ -18,12 +18,11 @@ static cpp_int norm(cpp_int x){x%=M;if(x<0)x+=M;return x;}
 static Bytes unhex(const std::string&s){
  if(s.size()%2)throw std::runtime_error("invalid hex");
  Bytes b;for(size_t i=0;i<s.size();i+=2){auto hexdig=[](char c){
- if(c>='0'&&c<='9')return c-'0';if(c>='a'&&c<='f')return c-'a'+10;
- if(c>='A'&&c<='F')return c-'A'+10;throw std::runtime_error("bad hex");
+ if(c>='0'&&c<='9') return c-'0';
+ if(c>='a'&&c<='f') return c-'a'+10;
+ if(c>='A'&&c<='F') return c-'A'+10;
+ throw std::runtime_error("bad hex");
  };b.push_back((hexdig(s[i])<<4)|hexdig(s[i+1]));}return b;
-}
-static std::string hex(const Bytes&v){
- const char*digits="0123456789abcdef";std::string s;for(unsigned char b:v){s+=digits[b>>4];s+=digits[b&15];}return s;
 }
 static cpp_int toint(const Bytes&v){
  cpp_int x=0;for(int i=int(v.size())-1;i>=0;--i){x<<=8;x+=v[i];}return x;
