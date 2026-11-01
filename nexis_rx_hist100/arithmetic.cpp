@@ -14,7 +14,7 @@
 using boost::multiprecision::cpp_int;
 using Bytes=std::vector<unsigned char>;
 static cpp_int M=(cpp_int(1)<<256);
-static cpp_int norm(cpp_int x){x%=M;if(x<0)x+=M;return x;}
+static cpp_int mod256(cpp_int x){x%=M;if(x<0)x+=M;return x;}
 static Bytes unhex(const std::string&s){
  if(s.size()%2)throw std::runtime_error("invalid hex");
  Bytes b;for(size_t i=0;i<s.size();i+=2){auto hexdig=[](char c){
@@ -46,6 +46,7 @@ int main(int argc,char**argv){try{
  std::ifstream fin(argv[1]);if(!fin)throw std::runtime_error("input missing");
  std::ofstream fout(argv[3]);if(!fout)throw std::runtime_error("output failed");
  fout<<"height,nonce,timestamp,prev_low64,merkle_low64,H0_low64,H1_low64,H2_low64,D0_low64,D1_low64,affine_n2,quadratic_n3,cubic_n4,geometric_n2,add_nonce_adjacent,add_timestamp_adjacent,mul_nonce_adjacent,diff_times2_n2,adjacent_hamming_mean\n";
+ if(mod256(cpp_int(11)-cpp_int(15))!=M-4 || mod256(cpp_int(17)*cpp_int(9))!=153)throw std::runtime_error("mod256 arithmetic self-test failed");
  auto*cache=randomx_alloc_cache(RANDOMX_FLAG_DEFAULT);if(!cache)throw std::runtime_error("cache alloc");
  randomx_init_cache(cache,seed.data(),seed.size());
  auto*vm=randomx_create_vm(RANDOMX_FLAG_DEFAULT,cache,nullptr);if(!vm)throw std::runtime_error("vm alloc");
@@ -70,27 +71,27 @@ int main(int argc,char**argv){try{
   }
   if(hs[0]!=expected)throw std::runtime_error("historical 256-bit hash mismatch "+std::to_string(height));
   validated++;
-  cpp_int d0=norm(y[1]-y[0]),d1=norm(y[2]-y[1]);
-  bool a=norm(y[1]+d0)==y[2];affine.test(a);
-  bool q=norm(3*y[2]-3*y[1]+y[0])==y[3];quadratic.test(q);
-  bool c=norm(4*y[3]-6*y[2]+4*y[1]-y[0])==y[4];cubic.test(c);
-  bool g=norm(y[0]*y[2])==norm(y[1]*y[1]);geometric.test(g);
-  bool dd=norm(d0*2)==d1;delta2.test(dd);
-  deltaNonce.test(norm(d0*cpp_int(uint64_t(nonce)))==d1);
-  deltaTime.test(norm(d0*cpp_int(t))==d1);
+  cpp_int d0=mod256(y[1]-y[0]),d1=mod256(y[2]-y[1]);
+  bool a=mod256(y[1]+d0)==y[2];affine.test(a);
+  bool q=mod256(3*y[2]-3*y[1]+y[0])==y[3];quadratic.test(q);
+  bool c=mod256(4*y[3]-6*y[2]+4*y[1]-y[0])==y[4];cubic.test(c);
+  bool g=mod256(y[0]*y[2])==mod256(y[1]*y[1]);geometric.test(g);
+  bool dd=mod256(d0*2)==d1;delta2.test(dd);
+  deltaNonce.test(mod256(d0*cpp_int(uint64_t(nonce)))==d1);
+  deltaTime.test(mod256(d0*cpp_int(t))==d1);
   if(!hasBaseline){baselineDelta=d0;hasBaseline=true;}
   else sharedDelta.test(d0==baselineDelta);
   int hamSum=0;int plusN=0,plusT=0,mulN=0;
   for(unsigned j=0;j<4;++j){
     auto n=cpp_int(uint64_t(nonce)+j);
-    plusNonce.test(norm(y[j]+n)==y[j+1]);
-    minusNonce.test(norm(y[j]-n)==y[j+1]);
-    plusTime.test(norm(y[j]+t)==y[j+1]);
-    plusPrev.test(norm(y[j]+prev)==y[j+1]);
-    plusMerkle.test(norm(y[j]+merkle)==y[j+1]);
-    mulNonce.test(norm(y[j]*n)==y[j+1]);
-    mulTime.test(norm(y[j]*t)==y[j+1]);
-    mulPrev.test(norm(y[j]*prev)==y[j+1]);
+    const bool addN=(mod256(y[j]+n)==y[j+1]);plusNonce.test(addN);plusN+=addN;
+    minusNonce.test(mod256(y[j]-n)==y[j+1]);
+    const bool addT=(mod256(y[j]+t)==y[j+1]);plusTime.test(addT);plusT+=addT;
+    plusPrev.test(mod256(y[j]+prev)==y[j+1]);
+    plusMerkle.test(mod256(y[j]+merkle)==y[j+1]);
+    const bool timesN=(mod256(y[j]*n)==y[j+1]);mulNonce.test(timesN);mulN+=timesN;
+    mulTime.test(mod256(y[j]*t)==y[j+1]);
+    mulPrev.test(mod256(y[j]*prev)==y[j+1]);
     hamSum+=hamming(hs[j],hs[j+1]);totalHamming+=hamming(hs[j],hs[j+1]);
   }
   cpp_int mask64=(cpp_int(1)<<64)-1;
