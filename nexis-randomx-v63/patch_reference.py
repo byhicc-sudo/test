@@ -42,9 +42,9 @@ inject('namespace randomx {\n','namespace randomx {\n'+probe, 'namespace')
 inject('VmBase<Allocator, softAes>::generateProgram(seed);',
     'nexis_rx_trace_run = (++nexis_rx_run_index <= 8) ? nexis_rx_run_index : 0;\n'
     '\t\tVmBase<Allocator, softAes>::generateProgram(seed);', 'run-index')
-inject('executeBytecode(bytecode, scratchpad, config, randomx_vm::getFlags());',
+inject('executeBytecode(bytecode, scratchpad, config);',
     'nexis_rx_probe("before_bytecode", ic, nreg, spAddr0, spAddr1);\n'
-    '\t\t\texecuteBytecode(bytecode, scratchpad, config, randomx_vm::getFlags());\n'
+    '\t\t\texecuteBytecode(bytecode, scratchpad, config);\n'
     '\t\t\tnexis_rx_probe("after_bytecode", ic, nreg, spAddr0, spAddr1);', 'bytecode')
 inject('\t\t\tspAddr0 = 0;\n\t\t\tspAddr1 = 0;',
     '\t\t\tnexis_rx_probe("after_iteration", ic, nreg, spAddr0, spAddr1);\n'
