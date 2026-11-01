@@ -2,7 +2,7 @@ name: NEXIS-RX exact RandomX verification of 100 historical blocks
 on:
   push:
     branches: [nexis-rx-historical100-20261102]
-    paths: [.github/workflows/nexis-rx-100-exact-pow.yml]
+    paths: [.github/workflows/nexis-rx-100-exact-pow.yml, 'nexis_rx_hist100/**']
 permissions:
   contents: read
   actions: read
