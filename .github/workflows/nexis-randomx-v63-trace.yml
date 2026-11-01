@@ -1,0 +1,67 @@
+name: NEXIS RandomX V63 public reference trace
+on:
+  push:
+    branches:
+      - nexis-randomx-v63-reference-trace
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout public harness
+        uses: actions/checkout@v4
+      - name: Fetch pinned official RandomX
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.2.3 https://github.com/tevador/RandomX.git upstream-randomx
+          test "$(git -C upstream-randomx rev-parse HEAD)" = '12f2c2ffe2108d6cf54c391fee33c8bc3646cdab'
+      - name: Compile and run unmodified reference
+        run: |
+          set -euo pipefail
+          cmake -S upstream-randomx -B upstream-randomx/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build upstream-randomx/build --parallel 2
+          cc -O2 -I upstream-randomx/src -c nexis-randomx-v62/verify.c -o verify.o
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o rx_baseline
+          ./rx_baseline > BASELINE_RANDOMX_HASHES.txt
+          cat BASELINE_RANDOMX_HASHES.txt
+      - name: Apply passive register probe and rebuild
+        run: |
+          set -euo pipefail
+          python3 nexis-randomx-v63/patch_reference.py upstream-randomx/src/vm_interpreted.cpp
+          cmake --build upstream-randomx/build --parallel 2
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o rx_with_trace
+          ./rx_with_trace > INSTRUMENTED_RANDOMX_HASHES.txt 2> RANDOMX_V63_TRACE.txt
+          diff -u BASELINE_RANDOMX_HASHES.txt INSTRUMENTED_RANDOMX_HASHES.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          logs=Path('RANDOMX_V63_TRACE.txt').read_text().splitlines()
+          trace=[line for line in logs if line.startswith('RXTRACE|')]
+          assert len(trace)==120, f'Expected 120 probe records, got {len(trace)}'
+          stages={'before_bytecode','after_bytecode','after_iteration'}
+          observed=set()
+          for line in trace:
+              pairs=dict(field.split('=',1) for field in line.split('|')[1:])
+              key=(int(pairs['run']),int(pairs['iter']),pairs['stage'])
+              assert key not in observed, key
+              assert key[0] in range(1,9) and key[1] in {0,1,2,1023,2047} and key[2] in stages
+              assert len(pairs['r'])==128 and all(len(pairs[x])==128 for x in ('f','e','a'))
+              observed.add(key)
+          assert len(observed)==8*5*3
+          print('V63_REFERENCE_TRACE_PASS 120/120')
+          print('V63_HASH_UNCHANGED_PASS 4/4')
+          print('V63_RUNS=8 ITER_SAMPLES=5 STAGES=3 STATE_BITS=2048')
+          PY
+          sha256sum RANDOMX_V63_TRACE.txt BASELINE_RANDOMX_HASHES.txt INSTRUMENTED_RANDOMX_HASHES.txt
+      - name: Archive public reference trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexis-randomx-v63-public-reference-trace
+          path: |
+            BASELINE_RANDOMX_HASHES.txt
+            INSTRUMENTED_RANDOMX_HASHES.txt
+            RANDOMX_V63_TRACE.txt
+          if-no-files-found: ignore
