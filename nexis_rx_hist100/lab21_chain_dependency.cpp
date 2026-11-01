@@ -49,7 +49,7 @@ static size_t equalLines(const Bytes&a,const Bytes&b){
 struct Stage {Bytes scratch,seed,reg,spDigest;};
 struct Trace {std::vector<Stage>steps;Bytes finalHash;Bytes finalReg;};
 int main(int argc,char**argv){try{
- if(argc!=5)throw std::runtime_error("args historic_verified.csv seedhex out.tsv perturb.tsv");
+ if(argc!=6)throw std::runtime_error("args historic_verified.csv seedhex out.tsv perturb.tsv");
  std::ifstream f(argv[1]);if(!f)throw std::runtime_error("missing historic input");
  std::string line;std::getline(f,line);if(!std::getline(f,line))throw std::runtime_error("missing block record");
  auto v=fields(line);if(v.size()<9)throw std::runtime_error("bad historic record");
@@ -60,9 +60,10 @@ int main(int argc,char**argv){try{
  auto*cache=randomx_alloc_cache(RANDOMX_FLAG_DEFAULT);if(!cache)throw std::runtime_error("alloc cache");
  randomx_init_cache(cache,seed.data(),seed.size());
  auto*machine=randomx_create_vm(RANDOMX_FLAG_DEFAULT,cache,nullptr);if(!machine)throw std::runtime_error("create vm");
- std::ofstream out(argv[3]),pert(argv[4]);if(!out||!pert)throw std::runtime_error("write file");
+ std::ofstream out(argv[3]),pert(argv[4]),sppert(argv[5]);if(!out||!pert||!sppert)throw std::runtime_error("write file");
  out<<"sample,nonce,stage,seed_hd_from_winner_512,register_digest_hd_from_winner_256,scratch_digest_hd_from_winner_256,scratch_equal_bytes_of_2097152,scratch_identical_64byte_lines_of_32768\n";
  pert<<"register_word,final_blake_hamming_256,first_32_bits_modified,first_64_bits_modified\n";
+ sppert<<"scratchpad_64byte_line,changed_output_bits,first32_modified,first64_modified\n";
  if(sizeof(randomx::RegisterFile)!=256)throw std::runtime_error("register size assumption invalid");
  if(randomx::ScratchpadSize!=2097152)throw std::runtime_error("scratchpad size assumption invalid");
  auto trace=[&](uint32_t nonce,bool verifyReference)->Trace{
@@ -91,8 +92,34 @@ int main(int argc,char**argv){try{
    }
    snapshot();
   }
+  // Keep an exact copy of final VM registers before the AES scratchpad fold.
+  const auto savedRegs=*machine->getRegisterFile();
   t.finalHash.resize(32);machine->getFinalResult(t.finalHash.data(),32);
   t.finalReg=Bytes((uint8_t*)machine->getRegisterFile(),(uint8_t*)machine->getRegisterFile()+sizeof(randomx::RegisterFile));
+  if(nonce==winningNonce){
+   auto*scratch=(uint8_t*)const_cast<void*>(machine->getScratchpad());
+   unsigned changedFull=0,changedPrefix32=0,changedPrefix64=0;
+   const unsigned probes=64;
+   const unsigned scratchLines=randomx::ScratchpadSize/64;
+   for(unsigned i=0;i<probes;i++){
+    unsigned lineIndex=i*(scratchLines/probes);
+    unsigned pos=lineIndex*64;
+    scratch[pos]^=1;
+    *machine->getRegisterFile()=savedRegs;
+    Bytes testOut(32);machine->getFinalResult(testOut.data(),32);
+    scratch[pos]^=1;
+    int hd=hamming(t.finalHash,testOut);
+    bool prefix32=!std::equal(t.finalHash.begin(),t.finalHash.begin()+4,testOut.begin());
+    bool prefix64=!std::equal(t.finalHash.begin(),t.finalHash.begin()+8,testOut.begin());
+    changedFull+=(hd>0);changedPrefix32+=prefix32;changedPrefix64+=prefix64;
+    sppert<<lineIndex<<","<<hd<<","<<prefix32<<","<<prefix64<<"\n";
+   }
+   *machine->getRegisterFile()=savedRegs;
+   std::cout<<"SCRATCHPAD_SAMPLED_64BYTE_LINES="<<probes<<"/"<<scratchLines
+    <<" PERTURB_FULL_OUTPUT_CHANGED="<<changedFull<<"/"<<probes
+    <<" FIRST_32_OUTPUT_BITS_CHANGED="<<changedPrefix32<<"/"<<probes
+    <<" FIRST_64_OUTPUT_BITS_CHANGED="<<changedPrefix64<<"/"<<probes<<"\n";
+  }
   if(verifyReference && t.finalHash!=ref)throw std::runtime_error("MANUAL_CHAIN_MISMATCH_WITH_OFFICIAL_REFERENCE nonce="+std::to_string(nonce));
   return t;
  };
