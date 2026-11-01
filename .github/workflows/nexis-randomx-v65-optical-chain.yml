@@ -1,0 +1,78 @@
+name: NEXIS RandomX V65 real two-stage optical computation
+on:
+  push:
+    branches:
+      - nexis-randomx-v65-two-stage-optics
+permissions:
+  contents: read
+jobs:
+  photon-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout public test harness
+        uses: actions/checkout@v4
+      - name: Get pinned RandomX v1.2.3
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v1.2.3 https://github.com/tevador/RandomX.git upstream-randomx
+          test "$(git -C upstream-randomx rev-parse HEAD)" = "12f2c2ffe2108d6cf54c391fee33c8bc3646cdab"
+      - name: Build unmodified baseline and verify official hashes
+        run: |
+          set -euo pipefail
+          cmake -S upstream-randomx -B upstream-randomx/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build upstream-randomx/build --parallel 2
+          cc -O2 -I upstream-randomx/src -c nexis-randomx-v62/verify.c -o verify.o
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o baseline_rx
+          ./baseline_rx > V65_OFFICIAL_HASH.txt
+          grep -Fx 'OFFICIAL_RANDOMX_V1: 4/4 PASS' V65_OFFICIAL_HASH.txt
+      - name: Recompute address, scratchpad and dataset XOR through ideal MZI network
+        run: |
+          set -euo pipefail
+          python3 nexis-randomx-v65/patch_optical_chain.py upstream-randomx/src/vm_interpreted.cpp
+          cmake --build upstream-randomx/build --parallel 2
+          c++ verify.o upstream-randomx/build/librandomx.a -lpthread -lm -o optical_chain_rx
+          ./optical_chain_rx > V65_OPTICAL_HASH.txt 2> V65_OPTICAL_TRACE.txt
+          diff -u V65_OFFICIAL_HASH.txt V65_OPTICAL_HASH.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('V65_OPTICAL_TRACE.txt').read_text().splitlines()
+          summaries=[x for x in lines if x.startswith('V65_SUMMARY|')]
+          coherences=[x for x in lines if x.startswith('V65_COHERENCE|')]
+          addresses=[x for x in lines if x.startswith('V65_ADDRESS|')]
+          datasets=[x for x in lines if x.startswith('V65_DATASET|')]
+          assert len(summaries)==1 and len(coherences)==1, (len(summaries),len(coherences))
+          def parse(row):return dict(field.split('=',1) for field in row.split('|')[1:])
+          summary={k:int(v) for k,v in parse(summaries[0]).items()}
+          expected={'runs':32,'iterations':65536,'calls':1376256,'bits':81788928,'errors':0,
+                    'address_calls':196608,'scratchpad_calls':524288,'dataset_calls':524288,
+                    'memory_mix_calls':131072,'regeneration_bits':8388608,
+                    'dataset_samples':160,'address_samples':160}
+          assert summary == expected, (summary,expected)
+          assert parse(coherences[0]) == {'raw_cascade':'4/8','regenerated_cascade':'8/8'},coherences
+          for label,rows in [('address',addresses),('dataset',datasets)]:
+              assert len(rows)==160,(label,len(rows))
+              keys=[(int(parse(x)['run']),int(parse(x)['iter'])) for x in rows]
+              assert len(set(keys))==160,(label,'duplicate iter')
+              assert all(1<=r<=32 and i in {0,1,2,1023,2047} for r,i in keys)
+          for line in datasets:
+              d=parse(line)
+              assert (int(d['before'],16)^int(d['data'],16))==int(d['after'],16),line
+          print('V65_HASH_EQUIVALENCE: 4/4 PASS')
+          print('V65_OPTICAL_BIT_GATE: 81788928/81788928 PASS')
+          print('V65_REAL_VM_DATASET_SAMPLES: 160/160 PASS')
+          print('V65_COHERENT_CHAIN_NO_REGEN: 4/8')
+          print('V65_REGENERATED_CHAIN: 8/8')
+          print('V65_PHASE_REGEN_BITS: 8388608')
+          PY
+          sha256sum V65_OFFICIAL_HASH.txt V65_OPTICAL_HASH.txt V65_OPTICAL_TRACE.txt
+      - name: Archive public reference outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexis-randomx-v65-optical-logic-chain
+          path: |
+            V65_OFFICIAL_HASH.txt
+            V65_OPTICAL_HASH.txt
+            V65_OPTICAL_TRACE.txt
+          if-no-files-found: ignore
