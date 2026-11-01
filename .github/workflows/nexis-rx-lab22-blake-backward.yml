@@ -1,0 +1,63 @@
+name: NEXIS-RX LAB22 exact BLAKE2b backwards target constraint
+on:
+  push:
+    branches: [nexis-rx-lab22-blake-backward-20261102]
+    paths:
+      - "nexis_rx_hist100/lab22_blake_backward.cpp"
+      - ".github/workflows/nexis-rx-lab22-blake-backward.yml"
+permissions:
+  contents: read
+  actions: read
+jobs:
+  trace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download 100 exact historical PoW blobs
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_100_EXACT_RANDOMX_POW
+          repository: byhicc-sudo/test
+          run-id: 41355345515
+          github-token: ${{ github.token }}
+          path: input/winners
+      - name: Download 100 full RandomX nonce+1 hashes
+        uses: actions/download-artifact@v4
+        with:
+          name: NEXIS_RX_HIST100_SIMPLE_ALGORITHM_TESTS
+          repository: byhicc-sudo/test
+          run-id: 41355617209
+          github-token: ${{ github.token }}
+          path: input/neighbors
+      - name: Build pinned official RandomX reference and standalone inverse BLAKE2b audit
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libboost-dev >/dev/null
+          PIN=102f8acf90a7649ada410de5499a7ec62e49e1da
+          git clone -q https://github.com/tevador/RandomX.git upstream
+          git -C upstream checkout -q "$PIN"
+          test "$(git -C upstream rev-parse HEAD)" = "$PIN"
+          cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
+          cmake --build build --target randomx -j 2
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab22_blake_backward.cpp build/librandomx.a -pthread -o lab22
+          echo NATIVE_CPP_BUILD=OK
+      - name: Verify 256-bit hashes and invert final BLAKE2b rounds using real Monero states
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
+          ./lab22 input/winners/computed100.csv input/neighbors/winner_versus_nonce_plus_one.csv "$SEED" output/full_16_nonce_samples.csv output/SUMMARY.txt | tee output/LOG.txt
+          test "$(wc -l < output/full_16_nonce_samples.csv)" = 17
+          grep -F 'BLAKE2B_LAST_12_ROUNDS_REVERSED_EXACT=16/16' output/SUMMARY.txt
+          grep -F 'ACTUAL_REPRODUCED_RANDOMX_256BIT=16/16' output/SUMMARY.txt
+          sha256sum output/full_16_nonce_samples.csv output/SUMMARY.txt > output/SHA256.txt
+          cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload independent target-backtracking measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEXIS_RX_LAB22_EXACT_BLAKE_BACKWARDS
+          path: output/
+          if-no-files-found: ignore
