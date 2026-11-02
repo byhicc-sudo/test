@@ -1,9 +1,9 @@
-name: NEXIS-RX LAB24 exact GF2 nonce derivative rank and nonlinearity
+name: NEXIS-RX LAB25 real RandomX program and dataset reuse trace
 on:
   push:
-    branches: [nexis-rx-lab24-nonce-jacobian-20261102]
+    branches: [nexis-rx-lab25-reuse-trace-20261102]
     paths:
-      - "nexis_rx_hist100/lab24_nonce_gf2_derivative.cpp"
+      - "nexis_rx_hist100/lab25_job_reuse_trace.cpp"
       - ".github/workflows/nexis-rx-lab23-carry-constraints.yml"
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
           run-id: 41355345515
           github-token: ${{ github.token }}
           path: input/winners
-      - name: Build pinned official RandomX reference and standalone inverse BLAKE2b audit
+      - name: Build pinned official RandomX with exact read-only dataset instrumentation
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -31,26 +31,37 @@ jobs:
           git clone -q https://github.com/tevador/RandomX.git upstream
           git -C upstream checkout -q "$PIN"
           test "$(git -C upstream rev-parse HEAD)" = "$PIN"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('upstream/src/vm_interpreted_light.cpp')
+          s=p.read_text()
+          anchor='#include "dataset.hpp"'
+          target='uint32_t itemNumber = address / CacheLineSize;'
+          assert s.count(anchor)==1 and s.count(target)==1, "Official source mismatch"
+          s=s.replace(anchor,anchor+'\nextern "C" void nexis_lab25_dataset_address(uint64_t address);')
+          s=s.replace(target,'nexis_lab25_dataset_address(address);\n\t\t'+target)
+          p.write_text(s)
+          print("OFFICIAL_REFERENCE_PATCH=read_only_dataset_address_callback")
+          PY
           cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
           cmake --build build --target randomx -j 2
-          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab24_nonce_gf2_derivative.cpp build/librandomx.a -pthread -o lab24
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab25_job_reuse_trace.cpp build/librandomx.a -pthread -o lab25
           echo NATIVE_CPP_BUILD=OK
-      - name: Measure exact GF2 nonce mapping and higher differences
+      - name: Audit identical instruction and dataset address reuse on 16 verified nonces
         run: |
           set -euo pipefail
           mkdir -p output
           SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
-          ./lab24 input/winners/computed100.csv "$SEED" output/SUMMARY.txt output/candidates.csv | tee output/LOG.txt
-          test "$(wc -l < output/candidates.csv)" = 562
-          grep -F 'ACTUAL_FULL_RANDOMX_HASHES=561 UNIQUE_NONCES=561' output/SUMMARY.txt
-          grep -F 'NONCE_BIT_TO_TARGET_HIGH38_GF2_RANK=' output/SUMMARY.txt
-          grep -F 'THIRD_DIFFERENCE_32_TRIPLES_NONZERO_TARGET_HIGH38=' output/SUMMARY.txt
-          sha256sum output/SUMMARY.txt output/candidates.csv > output/SHA256.txt
+          ./lab25 input/winners/computed100.csv "$SEED" output/SUMMARY.txt output/per_nonce.csv | tee output/LOG.txt
+          test "$(wc -l < output/per_nonce.csv)" = 17
+          grep -F 'PINNED_OFFICIAL_RANDOMX_FULL_256BIT_MATCHES=16/16' output/SUMMARY.txt
+          grep -F 'DATASET_READS_TOTAL=262144' output/SUMMARY.txt
+          sha256sum output/SUMMARY.txt output/per_nonce.csv > output/SHA256.txt
           cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload exact GF2 derivative experiment
+      - name: Upload exact 16-nonce job reuse trace
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEXIS_RX_LAB24_NONCE_GF2_DERIVATIVES
+          name: NEXIS_RX_LAB25_JOB_REUSE
           path: output/
           if-no-files-found: ignore
