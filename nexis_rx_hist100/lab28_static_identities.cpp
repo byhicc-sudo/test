@@ -89,7 +89,8 @@ int main(int argc,char**argv){try{
  auto*cache=randomx_alloc_cache(RANDOMX_FLAG_DEFAULT);if(!cache)throw std::runtime_error("cache");
  randomx_init_cache(cache,seed.data(),seed.size());
  auto*vm=randomx_create_vm(RANDOMX_FLAG_DEFAULT,cache,nullptr);if(!vm)throw std::runtime_error("vm");
- const auto p=nonceOffset(blob),winner=uint32_t(std::stoul(row[1]));
+ const size_t p=nonceOffset(blob);
+ const uint32_t winner=uint32_t(std::stoul(row[1]));
  constexpr unsigned N=16;
  std::array<std::array<uint8_t,32>,N>oracle{};
  enabled=false;
