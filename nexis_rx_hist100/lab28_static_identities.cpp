@@ -124,6 +124,38 @@ int main(int argc,char**argv){try{
   std::cout<<"ROUND="<<round<<" OPT="<<enabled<<" HPS="<<double(N)/m.seconds
            <<" CFROUND_DELETED="<<m.cfround<<" PAIRS_DELETED="<<m.pairs<<"\n";
  }
+ // Cross-job validation: all 100 independent historic Monero blocks,
+ // a verified winner and one neighboring nonce for each block.
+ std::ifstream multi(argv[1]);std::string newLine;
+ if(!multi)throw std::runtime_error("cross job dataset missing");
+ std::getline(multi,newLine);
+ unsigned historicJobs=0,validHistoricalWinners=0,otherCandidates=0;
+ uint64_t actualOptimizedPrograms=0,actualOptimizedPairs=0,actualOptimizedCfround=0;
+ while(std::getline(multi,newLine)){
+  if(newLine.empty())continue;
+  auto item=cols(newLine);
+  if(item.size()<9)throw std::runtime_error("malformed 100 historic block row");
+  Bytes work=unhex(item[4]),expectedJobHash=unhex(item[3]);
+  if(work.size()!=76||expectedJobHash.size()!=32)throw std::runtime_error("historic job sizes");
+  size_t where=nonceOffset(work);uint32_t validNonce=uint32_t(std::stoul(item[1]));
+  for(unsigned variant=0;variant<2;variant++){
+   setnonce(work,where,validNonce+variant);
+   std::array<uint8_t,32>regular{},optimized{};
+   enabled=false;randomx_calculate_hash(vm,work.data(),work.size(),regular.data());
+   if(variant==0){
+    if(!std::equal(regular.begin(),regular.end(),expectedJobHash.begin()))throw std::runtime_error("historical winner hash mismatch at "+item[0]);
+    validHistoricalWinners++;
+   }else otherCandidates++;
+   clearCounts();enabled=true;
+   randomx_calculate_hash(vm,work.data(),work.size(),optimized.data());
+   if(optimized!=regular)throw std::runtime_error("static algebraic identity broke job at height "+item[0]);
+   actualOptimizedPrograms+=totalPrograms;
+   actualOptimizedPairs+=pairsRemoved;
+   actualOptimizedCfround+=cfroundRemoved;
+  }
+  historicJobs++;
+ }
+ if(historicJobs!=100||validHistoricalWinners!=100||otherCandidates!=100)throw std::runtime_error("historical 100 count mismatch");
  enabled=false;
  randomx_destroy_vm(vm);randomx_release_cache(cache);
  auto emit=[&](const std::string&s){std::cout<<s<<"\n";report<<s<<"\n";};
@@ -142,6 +174,13 @@ int main(int argc,char**argv){try{
  emit("STANDARD_MODE_HPS="+std::to_string(a.checks/a.seconds));
  emit("STATIC_SIMPLIFIED_MODE_HPS="+std::to_string(b.checks/b.seconds));
  emit("MEASURED_RATIO_STATIC_TO_STANDARD="+std::to_string((b.checks/b.seconds)/(a.checks/a.seconds)));
+ emit("HISTORICAL_DISTINCT_MONERO_BLOCKS_VERIFIED="+std::to_string(historicJobs)+"/100");
+ emit("HISTORICAL_WINNING_NONCES_VERIFIED="+std::to_string(validHistoricalWinners)+"/100");
+ emit("HISTORICAL_NONCE_PLUS_ONE_VERIFIED="+std::to_string(otherCandidates)+"/100");
+ emit("STATIC_ALGEBRAIC_FULL_HASH_MATCHES_CROSS_JOB="+std::to_string(2*historicJobs)+"/"+std::to_string(2*historicJobs));
+ emit("CROSS_JOB_OPTIMIZED_PROGRAMS="+std::to_string(actualOptimizedPrograms));
+ emit("CROSS_JOB_STATIC_CANCEL_PAIRS="+std::to_string(actualOptimizedPairs));
+ emit("CROSS_JOB_CFROUND_REMOVED="+std::to_string(actualOptimizedCfround));
  emit("CAVEAT=Only static identities proven safe against branch entry and floating point use. Bytecode NOP still executes interpreter dispatch; real H/s controls whether any useful acceleration exists. No early winning nonce predictor.");
  return 0;
  }catch(const std::exception&e){std::cerr<<"ERROR "<<e.what()<<"\n";return 1;}
