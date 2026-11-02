@@ -50,7 +50,8 @@ template<size_t N>static size_t gf2rank(const std::vector<std::bitset<N>>&vector
 }
 static Sample combine(const Sample&a,const Sample&b){
  Sample x;for(size_t i=0;i<64;i++)x.blake[i]=a.blake[i]^b.blake[i];
- for(size_t i=0;i<32;i++)x.pow[i]=a.pow[i]^b.pow[i];return x;
+ for(size_t i=0;i<32;i++)x.pow[i]=a.pow[i]^b.pow[i];
+ return x;
 }
 static bool zeros(const Sample&s){for(auto b:s.pow)if(b)return false;return true;}
 static int lz(const std::array<uint8_t,32>&b){
