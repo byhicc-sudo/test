@@ -30,7 +30,7 @@ static size_t npos(const Bytes&b){
 }
 static uint32_t getnonce(const Bytes&b,size_t p){uint32_t n=0;for(unsigned i=0;i<4;i++)n|=uint32_t(b[p+i])<<(8*i);return n;}
 static void putnonce(Bytes&b,size_t p,uint32_t n){for(unsigned i=0;i<4;i++)b[p+i]=uint8_t(n>>(8*i));}
-static cpp_int numberhex(const std::string&s){cpp_int x=0;for(char c:s){int z=c>='0'&&c<='9'?c-'0':(c>='a'&&c<='f'?c-'a'+10:-1);if(z<0||z>15)throw std::runtime_error("bad difficulty");x=(x<<4)+z;}return x;}
+static cpp_int numberhex(const std::string&raw){std::string s=raw;if(s.substr(0,2)=="0x")s.erase(0,2);cpp_int x=0;for(char c:s){int z=c>='0'&&c<='9'?c-'0':(c>='a'&&c<='f'?c-'a'+10:-1);if(z<0||z>15)throw std::runtime_error("bad difficulty");x=(x<<4)+z;}return x;}
 static cpp_int leint(const std::array<uint8_t,32>&b){cpp_int x=0;for(int i=31;i>=0;i--)x=(x<<8)+b[size_t(i)];return x;}
 static uint64_t high38(const std::array<uint8_t,32>&h){
  uint64_t w=0;for(unsigned k=0;k<8;k++)w|=uint64_t(h[24+k])<<(8*k);
