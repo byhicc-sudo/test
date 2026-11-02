@@ -45,6 +45,8 @@ jobs:
           test "$(wc -l < output/compare.csv)" = 65
           grep -F 'PINNED_OFFICIAL_RANDOMX_256BIT_EXACT=64/64' output/SUMMARY.txt
           grep -F 'STATIC_BYTECODE_INSTRUCTIONS_REPLACED_BY_NOP=' output/SUMMARY.txt
+          grep -F 'HISTORICAL_DISTINCT_MONERO_BLOCKS_VERIFIED=100/100' output/SUMMARY.txt
+          grep -F 'STATIC_ALGEBRAIC_FULL_HASH_MATCHES_CROSS_JOB=200/200' output/SUMMARY.txt
           grep -F 'MEASURED_RATIO_STATIC_TO_STANDARD=' output/SUMMARY.txt
           sha256sum output/SUMMARY.txt output/compare.csv > output/SHA256.txt
           cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
