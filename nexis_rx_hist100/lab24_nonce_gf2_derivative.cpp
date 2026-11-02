@@ -130,7 +130,7 @@ int main(int argc,char**argv){try{
   const uint32_t mask=(uint32_t(1)<<a)|(uint32_t(1)<<b)|(uint32_t(1)<<c);
   // Third finite difference over {a,b,c}:
   // F(abc)^F(ab)^F(ac)^F(bc)^F(a)^F(b)^F(c)^F(0).
-  auto third=combine(calculate(mask),zero);
+  auto third=calculate(mask);
   third=combine(third,first[a]);third=combine(third,first[b]);third=combine(third,first[c]);
   auto ab=secondDerivatives.at((uint32_t(1)<<a)|(uint32_t(1)<<b));
   auto ac=secondDerivatives.at((uint32_t(1)<<a)|(uint32_t(1)<<c));
@@ -138,7 +138,7 @@ int main(int argc,char**argv){try{
   // (second derivative)=F(pair)^F(a)^F(b)^F(0); substituting three derivatives
   // cancels singles and baseline as needed, giving exact third difference.
   // D3=F(abc)^F(ab)^F(ac)^F(bc)^F(a)^F(b)^F(c)^F(0)
-  // =F(abc)^Dab^Dac^Dbc^F(a)^F(b)^F(c)^F(0)
+  // =F(abc)^Dab^Dac^Dbc^F(a)^F(b)^F(c)
   third=combine(third,ab);third=combine(third,ac);third=combine(third,bc);
   thirdNonzero256+=!zeros(third);
   thirdNonzero38+=(high38(third.pow)!=0);
