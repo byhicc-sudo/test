@@ -1,9 +1,9 @@
-name: NEXIS-RX LAB25 real RandomX program and dataset reuse trace
+name: NEXIS-RX LAB26 exact dead-store removal and full RandomX replay
 on:
   push:
-    branches: [nexis-rx-lab25-reuse-trace-20261102]
+    branches: [nexis-rx-lab26-dead-store-20261102]
     paths:
-      - "nexis_rx_hist100/lab25_job_reuse_trace.cpp"
+      - "nexis_rx_hist100/lab26_dead_store.cpp"
       - ".github/workflows/nexis-rx-lab23-carry-constraints.yml"
 permissions:
   contents: read
@@ -31,37 +31,25 @@ jobs:
           git clone -q https://github.com/tevador/RandomX.git upstream
           git -C upstream checkout -q "$PIN"
           test "$(git -C upstream rev-parse HEAD)" = "$PIN"
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('upstream/src/vm_interpreted_light.cpp')
-          s=p.read_text()
-          anchor='#include "dataset.hpp"'
-          target='uint32_t itemNumber = address / CacheLineSize;'
-          assert s.count(anchor)==1 and s.count(target)==1, "Official source mismatch"
-          s=s.replace(anchor,anchor+'\nextern "C" void nexis_lab25_dataset_address(uint64_t address);')
-          s=s.replace(target,'nexis_lab25_dataset_address(address);\n\t\t'+target)
-          p.write_text(s)
-          print("OFFICIAL_REFERENCE_PATCH=read_only_dataset_address_callback")
-          PY
+          python3 nexis_rx_hist100/lab26_patch_official.py upstream
           cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
           cmake --build build --target randomx -j 2
-          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab25_job_reuse_trace.cpp build/librandomx.a -pthread -o lab25
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab26_dead_store.cpp build/librandomx.a -pthread -o lab26
           echo NATIVE_CPP_BUILD=OK
-      - name: Audit identical instruction and dataset address reuse on 16 verified nonces
+      - name: Trace two authentic RandomX nonces and replay removed dead writes
         run: |
           set -euo pipefail
           mkdir -p output
           SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
-          ./lab25 input/winners/computed100.csv "$SEED" output/SUMMARY.txt output/per_nonce.csv | tee output/LOG.txt
-          test "$(wc -l < output/per_nonce.csv)" = 17
-          grep -F 'PINNED_OFFICIAL_RANDOMX_FULL_256BIT_MATCHES=16/16' output/SUMMARY.txt
-          grep -F 'DATASET_READS_TOTAL=262144' output/SUMMARY.txt
-          sha256sum output/SUMMARY.txt output/per_nonce.csv > output/SHA256.txt
+          ./lab26 input/winners/computed100.csv "$SEED" output/SUMMARY.txt output/samples.csv | tee output/LOG.txt
+          test "$(wc -l < output/samples.csv)" = 3
+          grep -F 'OFFICIAL_RANDOMX_256BIT_HASH_EXACT=2/2' output/SUMMARY.txt
+          grep -F 'FULL_HASH_REPLAY_WITH_DEAD_WRITES_SKIPPED=2/2' output/SUMMARY.txt
           cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload exact 16-nonce job reuse trace
+      - name: Upload LAB26 traced dead writes and independent full hash replay
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEXIS_RX_LAB25_JOB_REUSE
+          name: NEXIS_RX_LAB26_DEAD_STORE
           path: output/
           if-no-files-found: ignore
