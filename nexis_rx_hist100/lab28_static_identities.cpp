@@ -136,7 +136,7 @@ int main(int argc,char**argv){try{
   auto item=cols(newLine);
   if(item.size()<9)throw std::runtime_error("malformed 100 historic block row");
   Bytes work=unhex(item[4]),expectedJobHash=unhex(item[3]);
-  if(work.size()!=76||expectedJobHash.size()!=32)throw std::runtime_error("historic job sizes");
+  if(work.size()<43||expectedJobHash.size()!=32)throw std::runtime_error("historic job sizes at height "+item[0]+" blob_bytes="+std::to_string(work.size())+" hash_bytes="+std::to_string(expectedJobHash.size()));
   size_t where=nonceOffset(work);uint32_t validNonce=uint32_t(std::stoul(item[1]));
   for(unsigned variant=0;variant<2;variant++){
    setnonce(work,where,validNonce+variant);
