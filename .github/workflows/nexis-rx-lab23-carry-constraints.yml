@@ -1,9 +1,9 @@
-name: NEXIS-RX LAB27 online ISTORE writeback exact RandomX and measured speed
+name: NEXIS-RX LAB28 provable static RandomX instruction identities and speed
 on:
   push:
-    branches: [nexis-rx-lab27-online-writeback-20261102]
+    branches: [nexis-rx-lab28-static-identities-20261102]
     paths:
-      - "nexis_rx_hist100/lab27_online_writeback.cpp"
+      - "nexis_rx_hist100/lab28_static_identities.cpp"
       - ".github/workflows/nexis-rx-lab23-carry-constraints.yml"
 permissions:
   contents: read
@@ -31,26 +31,27 @@ jobs:
           git clone -q https://github.com/tevador/RandomX.git upstream
           git -C upstream checkout -q "$PIN"
           test "$(git -C upstream rev-parse HEAD)" = "$PIN"
-          python3 nexis_rx_hist100/lab27_patch_official.py upstream
+          python3 nexis_rx_hist100/lab28_patch_official.py upstream
           cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
           cmake --build build --target randomx -j 2
-          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab27_online_writeback.cpp build/librandomx.a -pthread -o lab27
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab28_static_identities.cpp build/librandomx.a -pthread -o lab28
           echo NATIVE_CPP_BUILD=OK
-      - name: Compare online ISTORE write combining to reference across 64 full hashes
+      - name: Validate 64 exact RandomX hashes and H/s with static safe rules
         run: |
           set -euo pipefail
           mkdir -p output
           SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
-          ./lab27 input/winners/computed100.csv "$SEED" output/SUMMARY.txt output/samples.csv | tee output/LOG.txt
-          test "$(wc -l < output/samples.csv)" = 65
-          grep -F 'COMPARED_OFFICIAL_FULL_RANDOMX_256BIT=64/64' output/SUMMARY.txt
-          grep -F 'ONLINE_COALESCED_ISTORE=' output/SUMMARY.txt
-          grep -F 'MEASURED_RATIO_DEFERRED_TO_DIRECT=' output/SUMMARY.txt
+          ./lab28 input/winners/computed100.csv "$SEED" output/SUMMARY.txt output/compare.csv | tee output/LOG.txt
+          test "$(wc -l < output/compare.csv)" = 65
+          grep -F 'PINNED_OFFICIAL_RANDOMX_256BIT_EXACT=64/64' output/SUMMARY.txt
+          grep -F 'STATIC_BYTECODE_INSTRUCTIONS_REPLACED_BY_NOP=' output/SUMMARY.txt
+          grep -F 'MEASURED_RATIO_STATIC_TO_STANDARD=' output/SUMMARY.txt
+          sha256sum output/SUMMARY.txt output/compare.csv > output/SHA256.txt
           cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload LAB27 exact online combining and speed benchmark
+      - name: Upload LAB28 exact static instruction and speed report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEXIS_RX_LAB27_ONLINE_WRITEBACK
+          name: NEXIS_RX_LAB28_STATIC_IDENTITIES
           path: output/
           if-no-files-found: ignore
