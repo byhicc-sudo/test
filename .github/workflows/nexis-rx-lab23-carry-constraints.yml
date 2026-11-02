@@ -1,9 +1,9 @@
-name: NEXIS-RX LAB23 exact full-adder carry and true target bit constraint
+name: NEXIS-RX LAB24 exact GF2 nonce derivative rank and nonlinearity
 on:
   push:
-    branches: [nexis-rx-lab23-carry-constraints-20261102]
+    branches: [nexis-rx-lab24-nonce-jacobian-20261102]
     paths:
-      - "nexis_rx_hist100/lab23_bitcarry_target.cpp"
+      - "nexis_rx_hist100/lab24_nonce_gf2_derivative.cpp"
       - ".github/workflows/nexis-rx-lab23-carry-constraints.yml"
 permissions:
   contents: read
@@ -22,14 +22,6 @@ jobs:
           run-id: 41355345515
           github-token: ${{ github.token }}
           path: input/winners
-      - name: Download 100 full RandomX nonce+1 hashes
-        uses: actions/download-artifact@v4
-        with:
-          name: NEXIS_RX_HIST100_SIMPLE_ALGORITHM_TESTS
-          repository: byhicc-sudo/test
-          run-id: 41355617209
-          github-token: ${{ github.token }}
-          path: input/neighbors
       - name: Build pinned official RandomX reference and standalone inverse BLAKE2b audit
         run: |
           set -euo pipefail
@@ -41,25 +33,24 @@ jobs:
           test "$(git -C upstream rev-parse HEAD)" = "$PIN"
           cmake -S upstream -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARCH=native
           cmake --build build --target randomx -j 2
-          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab23_bitcarry_target.cpp build/librandomx.a -pthread -o lab23
+          g++ -std=c++17 -O3 -Wall -Wextra -Werror -Wno-unused-parameter -Iupstream/src nexis_rx_hist100/lab24_nonce_gf2_derivative.cpp build/librandomx.a -pthread -o lab24
           echo NATIVE_CPP_BUILD=OK
-      - name: Verify 256-bit hashes and invert final BLAKE2b rounds using real Monero states
+      - name: Measure exact GF2 nonce mapping and higher differences
         run: |
           set -euo pipefail
           mkdir -p output
           SEED=ede5e439528eee8366e06971e881221d3ff12a0b76152e4c462ca0642dce732d
-          ./lab23 input/winners/computed100.csv input/neighbors/winner_versus_nonce_plus_one.csv "$SEED" output/full_16_nonce_samples.csv output/SUMMARY.txt | tee output/LOG.txt
-          test "$(wc -l < output/full_16_nonce_samples.csv)" = 17
-          grep -F 'BLAKE2B_LAST_12_ROUNDS_REVERSED_EXACT=16/16' output/SUMMARY.txt
-          grep -F 'ACTUAL_REPRODUCED_RANDOMX_256BIT=16/16' output/SUMMARY.txt
-          grep -F 'SYNTHETIC_TERMINAL_STATES_SAME_256BIT_HASH=38' output/SUMMARY.txt
-          grep -F 'SYNTHETIC_INVERSES_NOT_REAL_INIT=64' output/SUMMARY.txt
-          sha256sum output/full_16_nonce_samples.csv output/SUMMARY.txt > output/SHA256.txt
+          ./lab24 input/winners/computed100.csv "$SEED" output/SUMMARY.txt output/candidates.csv | tee output/LOG.txt
+          test "$(wc -l < output/candidates.csv)" = 562
+          grep -F 'ACTUAL_FULL_RANDOMX_HASHES=561 UNIQUE_NONCES=561' output/SUMMARY.txt
+          grep -F 'NONCE_BIT_TO_TARGET_HIGH38_GF2_RANK=' output/SUMMARY.txt
+          grep -F 'THIRD_DIFFERENCE_32_TRIPLES_NONZERO_TARGET_HIGH38=' output/SUMMARY.txt
+          sha256sum output/SUMMARY.txt output/candidates.csv > output/SHA256.txt
           cat output/SUMMARY.txt >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload independent target-backtracking measurements
+      - name: Upload exact GF2 derivative experiment
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: NEXIS_RX_LAB23_BITCARRY_TARGET_ONLY
+          name: NEXIS_RX_LAB24_NONCE_GF2_DERIVATIVES
           path: output/
           if-no-files-found: ignore
